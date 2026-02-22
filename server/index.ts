@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ============================================================================
-// 🔐 BingX API Configuration
+// 🔐 BingX API Configuration — PRESERVED FROM ORIGINAL
 // ============================================================================
 const BINGX_CONFIG = {
   API_KEY: "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw",
@@ -345,6 +345,8 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`🚀 Sovereign Master-Brain running on http://localhost:${port}/`);
     console.log(`📡 Connected to BingX API: ${BINGX_CONFIG.BASE_URL}`);
+    console.log(`💰 Trading Symbol: ${BINGX_CONFIG.SYMBOL}`);
+    console.log(`⚙️ Leverage: ${BINGX_CONFIG.LEVERAGE}x`);
   });
 }
 
