@@ -330,7 +330,7 @@ async function startServer() {
   // ────────────────────────────────────────────────────────────────────────
   // On Render, the root directory is /opt/render/project/src
   // Our client files are in /opt/render/project/src/client
-  const staticPath = path.resolve(__dirname, "..", "client");
+  const staticPath = path.resolve(process.cwd(), "client");
 
   app.use(express.static(staticPath));
 
