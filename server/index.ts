@@ -111,7 +111,7 @@ async function startServer() {
   // ────────────────────────────────────────────────────────────────────────
   app.get("/api/price", async (req, res) => {
     try {
-      const response = await bingxRequest("GET", "/openApi/swap/v3/quote/price", {
+      const response = await bingxRequest("GET", "/openApi/swap/v2/quote/price", {
         symbol: BINGX_CONFIG.SYMBOL
       });
 
