@@ -59,10 +59,12 @@ async function bingxRequest(
       params: { ...requestParams, signature }
     };
 
+    console.log(`📡 Sending ${method} request to ${endpoint}...`);
     const response = await axios(config);
+    console.log(`✅ Response from ${endpoint}:`, JSON.stringify(response.data).substring(0, 100) + "...");
     return response.data;
   } catch (error: any) {
-    console.error(`BingX API Error [${endpoint}]:`, error.message);
+    console.error(`❌ BingX API Error [${endpoint}]:`, error.response?.data || error.message);
     throw error;
   }
 }
@@ -74,6 +76,12 @@ async function bingxRequest(
 async function startServer() {
   const app = express();
   app.use(express.json());
+
+  // Logging middleware
+  app.use((req, _res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
 
   // ────────────────────────────────────────────────────────────────────────
   // 💰 Get Account Balance
@@ -328,8 +336,6 @@ async function startServer() {
   // ────────────────────────────────────────────────────────────────────────
   // 🏠 Serve Static Files
   // ────────────────────────────────────────────────────────────────────────
-  // On Render, the root directory is /opt/render/project/src
-  // Our client files are in /opt/render/project/src/client
   const staticPath = path.resolve(process.cwd(), "client");
 
   app.use(express.static(staticPath));
