@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sovereign X — العقل السيد</title>
+    <title>Sovereign X — العقل السيد (Ultra-Speed)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -16,26 +16,27 @@
         .btn-activate { background: linear-gradient(135deg, #065f46, #10b981); color: #000; font-weight: 900; transition: 0.3s; }
         .btn-activate:hover { transform: scale(1.02); box-shadow: 0 0 40px rgba(16, 185, 129, 0.5); }
         .mono { font-family: 'JetBrains Mono', monospace; }
-        .vault-active { border-color: var(--gold) !important; box-shadow: 0 0 30px rgba(251, 191, 36, 0.1); }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: var(--alpha); border-radius: 10px; }
-        .log-entry { border-right: 4px solid transparent; animation: slideIn 0.3s ease-out; }
+        .log-entry { border-right: 4px solid transparent; animation: slideIn 0.1s ease-out; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .speed-tag { background: rgba(16, 185, 129, 0.1); color: var(--alpha); padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 900; border: 1px solid rgba(16, 185, 129, 0.3); }
     </style>
 </head>
 <body class="p-4 md:p-8">
 <div class="max-w-7xl mx-auto space-y-6">
 
-    <!-- Header & Wallet -->
+    <!-- Header -->
     <header class="alpha-glass p-8 flex flex-col lg:flex-row justify-between items-center gap-8 relative overflow-hidden master-glow">
-        <div class="absolute -right-20 -top-20 opacity-5 rotate-12"><i class="fa-solid fa-crown text-[250px] text-emerald-500"></i></div>
+        <div class="absolute -right-20 -top-20 opacity-5 rotate-12"><i class="fa-solid fa-bolt text-[250px] text-emerald-500"></i></div>
         <div class="flex items-center gap-6 z-10">
             <div class="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-900 flex items-center justify-center shadow-2xl">
                 <i class="fa-solid fa-brain text-black text-4xl"></i>
             </div>
             <div>
-                <h1 class="text-4xl font-black tracking-tighter uppercase italic">Sovereign <span class="text-emerald-500">Master-Brain</span></h1>
-                <p class="text-[10px] text-zinc-500 uppercase tracking-[0.6em] font-bold">Institutional Hybrid Core • Self-Evolving Algorithm</p>
+                <div class="flex items-center gap-3">
+                    <h1 class="text-4xl font-black tracking-tighter uppercase italic">Sovereign <span class="text-emerald-500">Master-Brain</span></h1>
+                    <span class="speed-tag">ULTRA-SPEED WS</span>
+                </div>
+                <p class="text-[10px] text-zinc-500 uppercase tracking-[0.6em] font-bold">Institutional Hybrid Core • Real-Time Execution</p>
             </div>
         </div>
 
@@ -44,10 +45,9 @@
                 <span class="text-[10px] text-zinc-600 block uppercase font-black mb-1 tracking-widest">المحفظة النشطة (Live)</span>
                 <span id="balance-display" class="mono text-4xl font-black text-white italic">$0.00</span>
             </div>
-            <div id="vault-card" class="alpha-glass p-5 text-center min-w-[180px] border-zinc-800">
-                <span class="text-[9px] text-zinc-500 block uppercase font-black mb-1 tracking-widest">خزنة الأمان</span>
-                <span id="secured-display" class="text-xl font-black text-zinc-700 mono">$0.00</span>
-                <div id="vault-tag" class="text-[8px] font-black mt-1 opacity-20 uppercase">Vault Locked</div>
+            <div class="alpha-glass p-5 text-center min-w-[180px] border-zinc-800">
+                <span class="text-[9px] text-zinc-500 block uppercase font-black mb-1 tracking-widest">زمن الاستجابة (Latency)</span>
+                <span id="latency-display" class="text-xl font-black text-emerald-500 mono">0ms</span>
             </div>
         </div>
     </header>
@@ -78,8 +78,8 @@
             <div id="m-lev" class="text-3xl font-black text-blue-400 mono">10x</div>
         </div>
         <div class="alpha-glass p-6 text-center border-b-2 border-purple-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-widest block mb-1">عامل الربح (PF)</span>
-            <div id="m-pf" class="text-3xl font-black text-purple-400 mono">—</div>
+            <span class="text-[10px] text-zinc-500 uppercase font-bold tracking-widest block mb-1">وضع البيانات</span>
+            <div id="m-status" class="text-xl font-black text-purple-400 mono uppercase">WebSocket</div>
         </div>
     </div>
 
@@ -100,7 +100,7 @@
             <h3 class="text-xs font-black uppercase text-zinc-500 mb-6 tracking-widest italic">Intelligence Execution Log</h3>
             <div id="logBody" class="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar text-[11px]">
                 <div class="h-full flex flex-col items-center justify-center text-zinc-800 text-center px-10">
-                    <i class="fa-solid fa-fingerprint text-5xl mb-4 opacity-10"></i>
+                    <i class="fa-solid fa-bolt-lightning text-5xl mb-4 opacity-10"></i>
                     <p class="font-bold uppercase tracking-widest opacity-20">بانتظار تفعيل المحرك...</p>
                 </div>
             </div>
@@ -110,45 +110,47 @@
 </div>
 
 <script>
-/**
- * Sovereign X — Master Brain Logic
- * استراتيجية صيد السيولة المؤسساتية SMC مع التطور الذكي
- */
+let chart = null, isLive = false, ws = null;
+let balance = 0, capital = 0, equityPoints = [];
+let btcHistory = [], currentPosition = null;
+let lastMsgTime = Date.now();
 
-let chart = null, isLive = false, loopInterval = null;
-let balance = 0, capital = 0, secured = 0, isVaultActive = false;
-let btcHistory = [], trades = [], equityPoints = [];
-let currentPosition = null;
+// --- WebSocket Connection ---
+function connectWS() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}`);
+    
+    ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const now = Date.now();
+        document.getElementById('latency-display').textContent = `${now - lastMsgTime}ms`;
+        lastMsgTime = now;
 
-// --- العقل السيد (Thinking Core) ---
-const MasterBrain = {
-    iq: 100,
-    leverage: 10,
-    targetRR: 3.0,
-    lookback: 30,
-    winStreak: 0,
-    lossStreak: 0,
+        if (msg.type === 'price') {
+            const price = msg.data;
+            document.getElementById('price-ticker').textContent = `BTC: $${price.toLocaleString()}`;
+            if (isLive) processSignal(price);
+        }
 
-    evolve(lastWin) {
-        if(lastWin) {
-            this.winStreak++;
-            this.lossStreak = 0;
-            if(this.winStreak >= 2) {
-                this.targetRR = Math.min(this.targetRR + 0.5, 5.5);
-                this.iq += 10;
-                return "CONFIDENCE UP: EXTENDING PROFIT TARGETS";
-            }
-        } else {
-            this.lossStreak++;
-            this.winStreak = 0;
-            if(this.lossStreak >= 1) {
-                this.leverage = Math.max(this.leverage - 2, 4);
-                this.targetRR = 2.0;
-                this.iq = Math.max(this.iq - 5, 100);
-                return "RISK ADVERSE: SHIFTING TO DEFENSIVE MODE";
+        if (msg.type === 'kline') {
+            const k = msg.data;
+            if (btcHistory.length > 0 && btcHistory[btcHistory.length - 1].t === k.t) {
+                btcHistory[btcHistory.length - 1] = k;
+            } else {
+                btcHistory.push(k);
+                if (btcHistory.length > 100) btcHistory.shift();
             }
         }
-        return "GENOME STABLE: MONITORING LIQUIDITY";
+    };
+
+    ws.onclose = () => setTimeout(connectWS, 3000);
+}
+
+const MasterBrain = {
+    iq: 100, leverage: 10, targetRR: 3.0, lookback: 30,
+    evolve(win) {
+        this.iq += win ? 5 : -2;
+        this.leverage = win ? Math.min(this.leverage + 1, 20) : Math.max(this.leverage - 1, 5);
     }
 };
 
@@ -159,7 +161,6 @@ const AnalysisCore = {
         const prev = data.slice(-MasterBrain.lookback - 1, -1);
         const low = Math.min(...prev.map(x => x.l));
         const high = Math.max(...prev.map(x => x.h));
-
         if (curr.l < low && curr.c > low) return 'BUY';
         if (curr.h > high && curr.c < high) return 'SELL';
         return null;
@@ -173,142 +174,97 @@ async function toggleEngine() {
         btn.classList.replace('btn-activate', 'bg-red-500');
         document.getElementById('btn-text').textContent = "إيقاف المحرك الآن";
         document.getElementById('logBody').innerHTML = '';
-        await initializeLiveTrading();
-        startLiveProcess();
+        addSpecialLog("🚀 تم تفعيل المحرك فائق السرعة (WebSocket Mode)");
+        await syncInitialData();
     } else {
         isLive = false;
-        clearInterval(loopInterval);
         btn.classList.replace('bg-red-500', 'btn-activate');
         document.getElementById('btn-text').textContent = "تفعيل العقل المتطور";
-        addSpecialLog("🛑 تم إيقاف المحرك. التداول المباشر متوقف.");
+        addSpecialLog("🛑 تم إيقاف المحرك.");
     }
 }
 
-async function fetchBalance() {
-    const res = await fetch('/api/balance');
-    const data = await res.json();
-    if (data.success) {
-        // BingX returns balance in an array or object depending on version
-        // Based on logs: {"code":0,"msg":"","data":[{"userId":"...","asset":"USDT","balance":"196.0145",...}]}
-        if (Array.isArray(data.balance)) {
-            const usdt = data.balance.find(b => b.asset === 'USDT');
-            return usdt ? parseFloat(usdt.balance) : 0;
-        }
-        return parseFloat(data.balance);
-    }
-    throw new Error(data.error || "Failed to fetch balance");
-}
-
-async function initializeLiveTrading() {
-    addSpecialLog("🚀 جاري تهيئة العقل للتداول المباشر...");
+async function syncInitialData() {
     try {
-        balance = await fetchBalance();
+        const res = await fetch('/api/balance');
+        const data = await res.json();
+        balance = data.balance;
         capital = balance;
         equityPoints.push(balance);
-        addSpecialLog(`💰 تم جلب الرصيد بنجاح: $${balance.toFixed(2)}`);
-
-        const klinesRes = await fetch('/api/klines?interval=1h&limit=100');
-        const klinesData = await klinesRes.json();
-        if (klinesData.success) {
-            btcHistory = klinesData.klines.map(x => ({t:x[0], o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5]}));
-            addSpecialLog("📊 تم جلب بيانات الشموع الأولية.");
-        }
-
+        
+        const kRes = await fetch('/api/klines');
+        const kData = await kRes.json();
+        btcHistory = kData.klines;
+        
         initChart();
         updateStats();
-        addSpecialLog("✅ العقل جاهز للتداول المباشر!");
-    } catch (e) {
-        addSpecialLog("❌ فشل تهيئة التداول المباشر: " + e.message);
-        isLive = false;
-        document.getElementById('mainBtn').classList.replace('bg-red-500', 'btn-activate');
-        document.getElementById('btn-text').textContent = "تفعيل العقل المتطور";
-    }
+    } catch (e) { console.error(e); }
 }
 
-async function startLiveProcess() {
-    loopInterval = setInterval(async () => {
-        if (!isLive) return;
+async function processSignal(currentPrice) {
+    const signal = AnalysisCore.getSignal(btcHistory);
+    
+    // 1. Check for Exit Conditions (SL/TP)
+    if (currentPosition) {
+        const pnl = currentPosition.side === 'BUY' ? 
+            (currentPrice - currentPosition.entry) : (currentPosition.entry - currentPrice);
+        const pnlPercent = (pnl / currentPosition.entry) * 100;
 
-        try {
-            const priceRes = await fetch('/api/price');
-            const priceData = await priceRes.json();
-            if (priceData.success) {
-                const currentPrice = priceData.price;
-                document.getElementById('price-ticker').textContent = `BTC: $${currentPrice.toLocaleString()}`;
+        if (pnlPercent <= -0.5 || pnlPercent >= 1.5) {
+            addSpecialLog(`🎯 Closing Position: ${pnlPercent.toFixed(2)}% PnL`);
+            const res = await fetch('/api/trade/close', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quantity: currentPosition.qty })
+            });
+            const data = await res.json();
+            if (data.success) {
+                addTradeLog(currentPosition.side, pnl * currentPosition.qty, "WS EXIT EXECUTED");
+                currentPosition = null;
+                MasterBrain.evolve(pnl > 0);
+                updateStats();
             }
-
-            const klinesRes = await fetch('/api/klines?interval=1h&limit=100');
-            const klinesData = await klinesRes.json();
-            if (klinesData.success) {
-                btcHistory = klinesData.klines.map(x => ({t:x[0], o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5]}));
-            }
-
-            const signal = AnalysisCore.getSignal(btcHistory);
-
-            if (!currentPosition && signal) {
-                const riskAmount = balance * 0.05;
-                const currentPrice = btcHistory[btcHistory.length-1].c;
-                const quantity = (riskAmount * MasterBrain.leverage) / currentPrice;
-
-                const tradeResponse = await fetch(`/api/trade/${signal.toLowerCase()}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ quantity, leverage: MasterBrain.leverage })
-                });
-
-                const tradeData = await tradeResponse.json();
-                if (tradeData.success) {
-                    currentPosition = { orderId: tradeData.orderId, side: signal };
-                    addTradeLog(signal, 0, "ORDER PLACED LIVE");
-                    addSpecialLog(`✅ تم فتح صفقة ${signal} بنجاح!`);
-
-                    const stopPrice = signal === 'BUY' ? currentPrice * 0.99 : currentPrice * 1.01;
-                    await fetch('/api/trade/update-sl', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderId: tradeData.orderId, stopPrice })
-                    });
-                    addSpecialLog(`🛡️ تم تعيين وقف الخسارة عند: $${stopPrice.toFixed(2)}`);
-                }
-            }
-
-            balance = await fetchBalance();
-            equityPoints.push(balance);
-            updateStats();
-            updateChart();
-
-        } catch (e) {
-            console.error(e);
         }
-    }, 10000);
+    }
+
+    // 2. Check for Entry Conditions
+    if (!currentPosition && signal) {
+        const riskAmount = balance * 0.05; // 5% Risk
+        const quantity = (riskAmount * MasterBrain.leverage) / currentPrice;
+        
+        addSpecialLog(`⚡ Signal Detected: ${signal} at $${currentPrice}`);
+        const res = await fetch(`/api/trade/${signal.toLowerCase()}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ quantity, leverage: MasterBrain.leverage })
+        });
+        const data = await res.json();
+        if (data.success) {
+            currentPosition = { id: data.orderId, side: signal, entry: currentPrice, qty: quantity };
+            addTradeLog(signal, 0, "INSTANT WS ENTRY");
+            
+            const sl = signal === 'BUY' ? currentPrice * 0.995 : currentPrice * 1.005;
+            await fetch('/api/trade/update-sl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ orderId: data.orderId, stopPrice: sl })
+            });
+        }
+    }
 }
 
 function updateStats() {
-    const currentTotal = balance + secured;
-    const net = currentTotal - capital;
-    document.getElementById('balance-display').textContent = `$${currentTotal.toFixed(2)}`;
-    document.getElementById('secured-display').textContent = `$${secured.toFixed(2)}`;
-    document.getElementById('m-pnl').textContent = `${net.toFixed(2)}$`;
-    document.getElementById('m-wr').textContent = `${(trades.filter(t=>t.win).length/trades.length*100 || 0).toFixed(1)}%`;
+    document.getElementById('balance-display').textContent = `$${balance.toFixed(2)}`;
+    document.getElementById('m-pnl').textContent = `${(balance - capital).toFixed(2)}$`;
     document.getElementById('iq-display').textContent = MasterBrain.iq;
     document.getElementById('m-lev').textContent = `${MasterBrain.leverage}x`;
 }
 
-function addTradeLog(side, pnl, brainMsg) {
+function addTradeLog(side, pnl, msg) {
     const log = document.getElementById('logBody');
     const div = document.createElement('div');
-    const isWin = pnl >= 0;
-    div.className = `p-4 border-r-4 ${isWin ? 'border-emerald-500 bg-emerald-500/5' : 'border-red-500 bg-red-500/5'} rounded-xl log-entry`;
-    div.innerHTML = `
-        <div class="flex justify-between items-center mb-1">
-            <span class="font-black text-white text-[10px] uppercase">${side} ORDER EXECUTED</span>
-            <span class="mono font-bold ${isWin ? 'text-emerald-400' : 'text-red-400'}">${isWin ? '+' : ''}${pnl.toFixed(2)}$</span>
-        </div>
-        <div class="text-[8px] text-zinc-500 font-bold uppercase flex justify-between">
-            <span>🧠 ${brainMsg}</span>
-            <span class="opacity-50">SMC CONFIRMED</span>
-        </div>
-    `;
+    div.className = `p-4 border-r-4 border-emerald-500 bg-emerald-500/5 rounded-xl log-entry`;
+    div.innerHTML = `<div class="flex justify-between items-center mb-1"><span class="font-black text-white text-[10px] uppercase">${side} EXECUTED</span><span class="mono font-bold text-emerald-400">${pnl.toFixed(2)}$</span></div><div class="text-[8px] text-zinc-500 font-bold uppercase">🧠 ${msg}</div>`;
     log.prepend(div);
 }
 
@@ -316,26 +272,20 @@ function addSpecialLog(msg) {
     const log = document.getElementById('logBody');
     const div = document.createElement('div');
     div.className = "p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-500 font-bold text-center text-[10px]";
-    div.innerHTML = `<i class="fa-solid fa-shield-check mr-2"></i> ${msg}`;
+    div.innerHTML = msg;
     log.prepend(div);
 }
 
 function initChart() {
     const ctx = document.getElementById('mainChart').getContext('2d');
-    if(chart) chart.destroy();
     chart = new Chart(ctx, {
         type: 'line',
-        data: { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#10b981', borderWidth: 3, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.3 }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.01)' }, ticks: { color: '#444' } } }, plugins: { legend: { display: false } } }
+        data: { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#10b981', borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.4 }] },
+        options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { display: false } } }, plugins: { legend: { display: false } } }
     });
 }
 
-function updateChart() {
-    if(!chart) return;
-    chart.data.labels = equityPoints.map((_, i) => i);
-    chart.data.datasets[0].data = equityPoints;
-    chart.update('none');
-}
+connectWS();
 </script>
 </body>
 </html>
