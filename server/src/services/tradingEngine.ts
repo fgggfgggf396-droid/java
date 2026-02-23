@@ -14,12 +14,12 @@ import pako from "pako";
 // ============================================================================
 
 interface Kline {
-  t: number;   // timestamp
-  o: number;   // open
-  h: number;   // high
-  l: number;   // low
-  c: number;   // close
-  v: number;   // volume
+  t: number;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
 }
 
 interface ActivePosition {
@@ -30,11 +30,11 @@ interface ActivePosition {
   quantity: number;
   originalQuantity: number;
   stopLoss: number;
-  takeProfit1x5: number;  // 1.5x risk target (partial close)
-  takeProfit3x: number;   // 3x risk target (full close)
-  riskAmount: number;     // dollar risk for this trade
-  riskPerUnit: number;    // |entry - SL| per unit
-  partialClosed: boolean; // has 50% been closed?
+  takeProfit1x5: number;
+  takeProfit3x: number;
+  riskAmount: number;
+  riskPerUnit: number;
+  partialClosed: boolean;
   breakEvenMoved: boolean;
   openTime: number;
 }
@@ -79,7 +79,7 @@ interface LogEntry {
 type EventCallback = (event: string, data: any) => void;
 
 // ============================================================================
-// 🔐 CONFIG — The Third Proposal Parameters
+// 🔐 CONFIG — The Third Proposal Parameters (EXACT USER LOGIC)
 // ============================================================================
 
 const CONFIG = {
@@ -88,22 +88,21 @@ const CONFIG = {
   REST_URL: "https://open-api.bingx.com",
   WS_URL: "wss://open-api-swap.bingx.com/swap-market",
 
-  // Dual-Core Symbols
   SYMBOLS: ["BTC-USDT", "ETH-USDT"] as const,
 
-  // Financial Framework — The Third Proposal
-  RISK_PERCENT: 0.05,          // 5% risk per trade (cumulative from live balance)
-  LEVERAGE: 10,                // Fixed 10x Cross Margin
-  MARGIN_MODE: "CROSSED",     // Cross Margin for maximum protection
+  // === USER'S EXACT FINANCIAL FRAMEWORK ===
+  RISK_PERCENT: 0.05,          // 5% of live balance per trade
+  RISK_CAP: 50.0,              // Max $50 risk per trade (user's riskCap)
+  FEE_RATE: 0.0008,            // 0.08% total fee (user's fee)
+  LEVERAGE: 10,                // 10x leverage
+  MARGIN_MODE: "CROSSED",      // Cross Margin
 
-  // SFP Detection
-  SL_BUFFER_PERCENT: 0.0005,  // 0.05% safety buffer behind wick
-  WICK_BODY_RATIO: 1.5,       // Minimum wick:body ratio for quality filter
-  LOOKBACK_CANDLES: 30,        // SFP lookback period
-  SIGNAL_COOLDOWN_MS: 15000,   // 15s cooldown between signals per symbol
-  MAX_CONCURRENT: 2,           // Max 2 positions (1 BTC + 1 ETH)
+  // === USER'S EXACT SFP DETECTION ===
+  LOOKBACK_CANDLES: 30,        // User's lookback: 30
+  SL_BUFFER_PERCENT: 0.0005,   // 0.05% safety buffer behind wick
+  SIGNAL_COOLDOWN_MS: 15000,
+  MAX_CONCURRENT: 2,           // 1 BTC + 1 ETH max
 
-  // Minimum quantities
   MIN_QTY: { "BTC-USDT": 0.001, "ETH-USDT": 0.01 } as Record<string, number>,
 };
 
@@ -188,9 +187,7 @@ export class TradingEngine {
   }
 
   // ---- Event System ----
-  onEvent(cb: EventCallback) {
-    this.eventCallbacks.push(cb);
-  }
+  onEvent(cb: EventCallback) { this.eventCallbacks.push(cb); }
 
   private emit(event: string, data: any) {
     for (const cb of this.eventCallbacks) {
@@ -212,31 +209,26 @@ export class TradingEngine {
     this.isRunning = true;
     this.log("info", "SYSTEM", "🚀 Institutional Guard v3.0 — The Third Proposal Engine starting...");
 
-    // Fetch balance
     await this.syncBalance();
     this.startBalance = this.balance;
     this.log("info", "SYSTEM", `💰 Balance: $${this.balance.toFixed(2)}`);
 
-    // Set margin mode to CROSS for all symbols
     for (const sym of CONFIG.SYMBOLS) {
       await this.setMarginMode(sym, CONFIG.MARGIN_MODE as "CROSSED");
     }
 
-    // Set leverage 10x for all symbols
     await this.setLeverageAll(CONFIG.LEVERAGE);
 
-    // Load initial klines
     for (const sym of CONFIG.SYMBOLS) {
       await this.loadKlines(sym);
     }
 
-    // Connect WebSocket
     this.connectWS();
 
-    // Start position monitor (checks SL/TP/partial every 500ms)
+    // Monitor positions every 500ms — The Third Proposal Protocol
     this.monitorInterval = setInterval(() => this.monitorPositions(), 500);
 
-    this.log("info", "SYSTEM", `✅ Engine running | Symbols: ${CONFIG.SYMBOLS.join(", ")} | Leverage: ${CONFIG.LEVERAGE}x | Risk: ${CONFIG.RISK_PERCENT * 100}% | Margin: CROSS`);
+    this.log("info", "SYSTEM", `✅ Engine running | Symbols: ${CONFIG.SYMBOLS.join(", ")} | Leverage: ${CONFIG.LEVERAGE}x | Risk: ${CONFIG.RISK_PERCENT * 100}% | Cap: $${CONFIG.RISK_CAP} | Margin: CROSS`);
     this.emit("started", this.getStats());
   }
 
@@ -305,12 +297,14 @@ export class TradingEngine {
   }
 
   // ---- Margin Mode ----
-  private async setMarginMode(symbol: string, mode: "ISOLATED" | "CROSSED") {
+  private async setMarginMode(symbol: string, mode: "CROSSED" | "ISOLATED") {
     try {
       await bingxRequest("POST", "/openApi/swap/v2/trade/marginType", { symbol, marginType: mode });
       this.log("info", symbol, `📐 Margin mode set to ${mode}`);
     } catch (e: any) {
-      this.log("info", symbol, `📐 Margin mode: ${mode} (may already be set)`);
+      if (!e.message?.includes("No need")) {
+        this.log("info", symbol, `📐 Margin mode already ${mode}`);
+      }
     }
   }
 
@@ -325,236 +319,202 @@ export class TradingEngine {
         this.log("error", sym, `Leverage error: ${e.message}`);
       }
     }
+    this.leverage = lev;
   }
 
   // ---- Load Klines ----
   private async loadKlines(symbol: string) {
     try {
       const res = await bingxRequest("GET", "/openApi/swap/v3/quote/klines", {
-        symbol, interval: "1m", limit: 100,
+        symbol, interval: "1h", limit: 100,
       });
-      if (res.code === 0 && Array.isArray(res.data)) {
+      if (res.code === 0 && res.data) {
         const state = this.symbols.get(symbol);
         if (state) {
           state.klines = res.data.map((k: any) => ({
-            t: k.time || k.t || k.T,
-            o: parseFloat(k.open || k.o || "0"),
-            h: parseFloat(k.high || k.h || "0"),
-            l: parseFloat(k.low || k.l || "0"),
-            c: parseFloat(k.close || k.c || "0"),
-            v: parseFloat(k.volume || k.v || "0"),
+            t: parseInt(k.time || k[0]),
+            o: parseFloat(k.open || k[1]),
+            h: parseFloat(k.high || k[2]),
+            l: parseFloat(k.low || k[3]),
+            c: parseFloat(k.close || k[4]),
+            v: parseFloat(k.volume || k[5] || "0"),
           }));
           this.log("info", symbol, `📊 Loaded ${state.klines.length} klines`);
         }
       }
     } catch (e: any) {
-      this.log("error", symbol, `Klines load failed: ${e.message}`);
+      this.log("error", symbol, `Klines error: ${e.message}`);
     }
   }
 
-  // ============================================================================
-  // 📡 WebSocket — Ultra-Low Latency Dual Symbol Monitoring
-  // ============================================================================
-
+  // ---- WebSocket ----
   private connectWS() {
-    if (this.wsReconnectTimer) { clearTimeout(this.wsReconnectTimer); this.wsReconnectTimer = null; }
-    if (!this.isRunning) return;
+    if (this.ws) { try { this.ws.close(); } catch (e) {} }
 
-    try {
-      this.ws = new WebSocket(CONFIG.WS_URL);
-    } catch (err) {
-      this.wsReconnectTimer = setTimeout(() => this.connectWS(), 5000);
-      return;
-    }
+    const streams = CONFIG.SYMBOLS.map(s => `${s}@kline_1m`).join(",");
+    const wsUrl = `${CONFIG.WS_URL}?listenKey=${streams}`;
+
+    this.ws = new WebSocket(wsUrl);
 
     this.ws.on("open", () => {
       this.log("info", "SYSTEM", "🔌 WebSocket connected — subscribing to dual symbols (Zero Latency)");
-
-      // Subscribe to BOTH symbols
       for (const sym of CONFIG.SYMBOLS) {
-        this.ws!.send(JSON.stringify({ id: `trade_${sym}`, reqType: "sub", dataType: `${sym}@trade` }));
-        this.ws!.send(JSON.stringify({ id: `kline_${sym}`, reqType: "sub", dataType: `${sym}@kline_1m` }));
+        const subMsg = JSON.stringify({ id: Date.now().toString(), reqType: "sub", dataType: `${sym}@kline_1m` });
+        this.ws?.send(subMsg);
       }
 
-      // Keep-alive
       if (this.pingInterval) clearInterval(this.pingInterval);
       this.pingInterval = setInterval(() => {
-        if (this.ws?.readyState === WebSocket.OPEN) this.ws.send("Pong");
+        if (this.ws?.readyState === WebSocket.OPEN) {
+          this.ws.send("Ping");
+        }
       }, 20000);
-
-      this.emit("ws_connected", true);
     });
 
-    this.ws.on("message", (data: Buffer) => {
+    this.ws.on("message", (raw: Buffer) => {
       try {
-        let decompressed: string;
-        try { decompressed = pako.inflate(data, { to: "string" }); } catch { decompressed = data.toString(); }
+        let text: string;
+        try {
+          const decompressed = pako.inflate(raw, { to: "string" });
+          text = decompressed;
+        } catch {
+          text = raw.toString();
+        }
 
-        if (decompressed === "Ping") { this.ws?.send("Pong"); return; }
+        if (text === "Pong" || text === "Ping") return;
 
-        const json = JSON.parse(decompressed);
-        const dataType: string = json.dataType || "";
+        const msg = JSON.parse(text);
+        if (msg.dataType && msg.data) {
+          const parts = msg.dataType.split("@");
+          const symbol = parts[0];
+          const klineData = Array.isArray(msg.data) ? msg.data[0] : msg.data;
 
-        // Determine which symbol this data belongs to
-        for (const sym of CONFIG.SYMBOLS) {
-          if (dataType.startsWith(sym)) {
-            const state = this.symbols.get(sym);
-            if (!state) continue;
+          if (klineData) {
+            const price = parseFloat(klineData.c || klineData.close || "0");
+            const state = this.symbols.get(symbol);
+            if (state && price > 0) {
+              state.price = price;
+              this.emit("price", { symbol, price });
 
-            // Trade data → price update (ultra-low latency)
-            if (dataType.endsWith("@trade")) {
-              const trades = json.data;
-              let newPrice = 0;
-              if (Array.isArray(trades) && trades.length > 0) {
-                newPrice = parseFloat(trades[0]?.p || "0");
-              } else if (trades?.p) {
-                newPrice = parseFloat(trades.p);
-              }
-              if (newPrice > 0) {
-                state.price = newPrice;
-                this.emit("price", { symbol: sym, price: newPrice });
-              }
-            }
+              // Update latest kline
+              const kline: Kline = {
+                t: parseInt(klineData.T || klineData.t || Date.now().toString()),
+                o: parseFloat(klineData.o || klineData.open || "0"),
+                h: parseFloat(klineData.h || klineData.high || "0"),
+                l: parseFloat(klineData.l || klineData.low || "0"),
+                c: price,
+                v: parseFloat(klineData.v || klineData.volume || "0"),
+              };
 
-            // Kline data
-            if (dataType.endsWith("@kline_1m")) {
-              const kData = json.data;
-              const k = Array.isArray(kData) ? kData[0] : kData;
-              if (k) {
-                const kline: Kline = {
-                  t: k.t || k.T,
-                  o: parseFloat(k.o || k.O || "0"),
-                  h: parseFloat(k.h || k.H || "0"),
-                  l: parseFloat(k.l || k.L || "0"),
-                  c: parseFloat(k.c || k.C || "0"),
-                  v: parseFloat(k.v || k.V || "0"),
-                };
+              if (state.klines.length > 0) {
+                const last = state.klines[state.klines.length - 1];
+                const klineTime = kline.t;
+                const lastTime = last.t;
 
-                // Update or append kline
-                if (state.klines.length > 0 && state.klines[state.klines.length - 1].t === kline.t) {
+                if (Math.abs(klineTime - lastTime) < 60000) {
                   state.klines[state.klines.length - 1] = kline;
                 } else {
                   state.klines.push(kline);
                   if (state.klines.length > 200) state.klines.shift();
-
-                  // New candle closed → analyze for SFP signal
-                  if (this.isRunning) {
-                    this.analyzeAndTrade(sym).catch((e) => {
-                      this.log("error", sym, `Analysis error: ${e.message}`);
-                    });
-                  }
+                  // New candle closed — analyze for SFP signal
+                  this.analyzeAndTrade(symbol);
                 }
-
-                this.emit("kline", { symbol: sym, kline });
               }
             }
-            break;
           }
         }
-      } catch (e) {
-        // Silent parse errors
-      }
-    });
-
-    this.ws.on("error", (err: any) => {
-      this.log("error", "SYSTEM", `WS Error: ${err.message}`);
-      if (this.pingInterval) clearInterval(this.pingInterval);
-      this.wsReconnectTimer = setTimeout(() => this.connectWS(), 5000);
+      } catch (e) { /* silent parse errors */ }
     });
 
     this.ws.on("close", () => {
-      this.log("info", "SYSTEM", "🔌 WS Closed. Reconnecting in 5s...");
-      if (this.pingInterval) clearInterval(this.pingInterval);
-      this.emit("ws_connected", false);
-      this.wsReconnectTimer = setTimeout(() => this.connectWS(), 5000);
+      this.log("info", "SYSTEM", "🔌 WebSocket disconnected — reconnecting in 5s...");
+      if (this.isRunning) {
+        this.wsReconnectTimer = setTimeout(() => this.connectWS(), 5000);
+      }
+    });
+
+    this.ws.on("error", (err) => {
+      this.log("error", "SYSTEM", `WebSocket error: ${err.message}`);
     });
   }
 
   // ============================================================================
-  // 🔍 SFP SIGNAL DETECTION — Structural Liquidity Sweep
+  // 🎯 SFP DETECTION — USER'S EXACT LOGIC
+  // detect(h, i) {
+  //   const s = h.slice(i - 30, i);
+  //   const l = Math.min(...s.map(d=>d.l));
+  //   const hi = Math.max(...s.map(d=>d.h));
+  //   const c = h[i];
+  //   if (c.l < l && c.c > l) return 'BUY';
+  //   if (c.h > hi && c.c < hi) return 'SELL';
+  //   return null;
+  // }
   // ============================================================================
 
   private detectSFP(klines: Kline[]): { signal: "BUY" | "SELL"; sweepCandle: Kline } | null {
     if (klines.length < CONFIG.LOOKBACK_CANDLES + 1) return null;
 
-    const current = klines[klines.length - 1];
-    const lookback = klines.slice(-CONFIG.LOOKBACK_CANDLES - 1, -1);
+    const i = klines.length - 1;
+    const current = klines[i];
+    const lookbackSlice = klines.slice(i - CONFIG.LOOKBACK_CANDLES, i);
 
-    const lowestLow = Math.min(...lookback.map(k => k.l));
-    const highestHigh = Math.max(...lookback.map(k => k.h));
+    const lowestLow = Math.min(...lookbackSlice.map(k => k.l));
+    const highestHigh = Math.max(...lookbackSlice.map(k => k.h));
 
-    const body = Math.abs(current.c - current.o);
-    const fullRange = current.h - current.l;
-
-    // Avoid zero-body candles
-    if (body === 0 || fullRange === 0) return null;
-
-    // ---- BULLISH SFP: Price swept below support then closed above ----
+    // USER'S EXACT BUY LOGIC: if (c.l < l && c.c > l) return 'BUY';
     if (current.l < lowestLow && current.c > lowestLow) {
-      const lowerWick = Math.min(current.o, current.c) - current.l;
-      if (lowerWick / body >= CONFIG.WICK_BODY_RATIO) {
-        return { signal: "BUY", sweepCandle: current };
-      }
+      return { signal: "BUY", sweepCandle: current };
     }
 
-    // ---- BEARISH SFP: Price swept above resistance then closed below ----
+    // USER'S EXACT SELL LOGIC: if (c.h > hi && c.c < hi) return 'SELL';
     if (current.h > highestHigh && current.c < highestHigh) {
-      const upperWick = current.h - Math.max(current.o, current.c);
-      if (upperWick / body >= CONFIG.WICK_BODY_RATIO) {
-        return { signal: "SELL", sweepCandle: current };
-      }
+      return { signal: "SELL", sweepCandle: current };
     }
 
     return null;
   }
 
   // ============================================================================
-  // 📊 ANALYZE & TRADE — The Third Proposal Core Logic
-  // Protocol: SFP → Structural SL → 50% @ 1.5x → BE → 3x Full
+  // 📊 ANALYZE & TRADE — USER'S EXACT FINANCIAL FRAMEWORK
+  // riskAmt = Math.min(balance * 0.05, 50)
+  // fee = (riskAmt * 10) * 0.0008
+  // SL behind sweep candle wick + buffer
+  // TP 1.5x = entry ± riskPerUnit * 1.5
+  // TP 3x = entry ± riskPerUnit * 3
   // ============================================================================
 
   private async analyzeAndTrade(symbol: string) {
     const state = this.symbols.get(symbol);
     if (!state || !this.isRunning) return;
 
-    // Cooldown check
     if (Date.now() - state.lastSignalTime < state.cooldownMs) return;
-
-    // Already has a position on this symbol
     if (state.position) return;
 
-    // Max concurrent positions check (1 BTC + 1 ETH max)
     let activeCount = 0;
     for (const [, s] of this.symbols) {
       if (s.position) activeCount++;
     }
     if (activeCount >= CONFIG.MAX_CONCURRENT) return;
 
-    // Detect SFP signal
     const sfp = this.detectSFP(state.klines);
     if (!sfp) return;
 
     state.lastSignalTime = Date.now();
-    this.log("signal", symbol, `🎯 SFP ${sfp.signal} detected at $${state.price.toLocaleString()} | Wick quality: PASSED`);
+    this.log("signal", symbol, `🎯 SFP ${sfp.signal} detected at $${state.price.toLocaleString()}`);
 
-    // Refresh balance before trade
     await this.syncBalance();
 
-    // ============================================================
-    // THE THIRD PROPOSAL — Financial Framework
-    // Risk: 5% of live balance (cumulative)
-    // ============================================================
-    const riskAmount = this.balance * CONFIG.RISK_PERCENT;
-    const buffer = CONFIG.SL_BUFFER_PERCENT;
+    // === USER'S EXACT FINANCIAL FRAMEWORK ===
+    // riskAmt = Math.min(balance * Logic.risk, Logic.riskCap);
+    const riskAmount = Math.min(this.balance * CONFIG.RISK_PERCENT, CONFIG.RISK_CAP);
 
-    let stopLoss: number;
+    const buffer = CONFIG.SL_BUFFER_PERCENT;
     let entryPrice = state.price;
+    let stopLoss: number;
 
     if (sfp.signal === "BUY") {
-      // SL below the sweep candle's lowest wick + buffer
       stopLoss = sfp.sweepCandle.l * (1 - buffer);
     } else {
-      // SL above the sweep candle's highest wick + buffer
       stopLoss = sfp.sweepCandle.h * (1 + buffer);
     }
 
@@ -565,11 +525,10 @@ export class TradingEngine {
     let quantity = (riskAmount * CONFIG.LEVERAGE) / entryPrice;
     const minQty = CONFIG.MIN_QTY[symbol] || 0.001;
 
-    // Round to appropriate precision
     if (symbol === "BTC-USDT") {
-      quantity = Math.floor(quantity * 1000) / 1000; // 3 decimals
+      quantity = Math.floor(quantity * 1000) / 1000;
     } else {
-      quantity = Math.floor(quantity * 100) / 100; // 2 decimals
+      quantity = Math.floor(quantity * 100) / 100;
     }
 
     if (quantity < minQty) {
@@ -577,7 +536,7 @@ export class TradingEngine {
       return;
     }
 
-    // Calculate TP targets based on risk distance
+    // TP targets based on risk distance
     const tp1x5 = sfp.signal === "BUY"
       ? entryPrice + riskPerUnit * 1.5
       : entryPrice - riskPerUnit * 1.5;
@@ -589,13 +548,11 @@ export class TradingEngine {
     this.log("trade", symbol, `📈 Opening ${sfp.signal}: qty=${quantity}, entry=$${entryPrice.toFixed(2)}, SL=$${stopLoss.toFixed(2)}, TP1.5x=$${tp1x5.toFixed(2)}, TP3x=$${tp3x.toFixed(2)} | Risk: $${riskAmount.toFixed(2)}`);
 
     try {
-      // Set leverage before order (always 10x)
       const positionSide = sfp.signal === "BUY" ? "LONG" : "SHORT";
       await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", {
         symbol, side: positionSide, leverage: CONFIG.LEVERAGE,
       });
 
-      // Place market order with structural SL
       const orderParams: Record<string, any> = {
         symbol,
         side: sfp.signal,
@@ -614,7 +571,6 @@ export class TradingEngine {
       if (res.code === 0) {
         const filledPrice = parseFloat(res.data?.order?.avgPrice || entryPrice.toString());
 
-        // Recalculate with actual fill price
         const actualRiskPerUnit = Math.abs(filledPrice - stopLoss);
         const actualTp1x5 = sfp.signal === "BUY"
           ? filledPrice + actualRiskPerUnit * 1.5
@@ -651,10 +607,14 @@ export class TradingEngine {
   }
 
   // ============================================================================
-  // 🔄 POSITION MONITOR — The Third Proposal Protocol (runs every 500ms)
-  // Phase 1: SL Hit → Cut loss immediately
-  // Phase 2: 1.5x reached → Close 50% + Move SL to Break-Even
+  // 🔄 POSITION MONITOR — USER'S EXACT THIRD PROPOSAL PROTOCOL (every 500ms)
+  //
+  // Phase 1: SL Hit → Full loss = -riskAmt
+  // Phase 2: 1.5x reached → Close 50% + Move SL to Entry (Break-Even)
+  //          = riskAmt * 0.5 * 1.5 profit locked
   // Phase 3: 3x reached → Close remaining 50%
+  //          = riskAmt * 0.5 * 3.0 profit locked
+  // Phase BE: If price returns to entry after partial → Exit at zero
   // ============================================================================
 
   private async monitorPositions() {
@@ -666,32 +626,29 @@ export class TradingEngine {
       const pos = state.position;
       const currentPrice = state.price;
 
-      // Calculate current PnL per unit
       const pnlPerUnit = pos.side === "BUY"
         ? currentPrice - pos.entryPrice
         : pos.entryPrice - currentPrice;
 
       const riskMultiple = pos.riskPerUnit > 0 ? pnlPerUnit / pos.riskPerUnit : 0;
 
-      // ---- PHASE 1: CHECK STOP LOSS HIT (programmatic SL as backup) ----
+      // ---- PHASE 1: STOP LOSS HIT ----
       const slHit = pos.side === "BUY"
         ? currentPrice <= pos.stopLoss
         : currentPrice >= pos.stopLoss;
 
       if (slHit) {
         if (pos.breakEvenMoved) {
-          // SL was at break-even — this is a scratch trade (no loss)
           this.log("close", sym, `🔒 BREAK-EVEN EXIT at $${currentPrice.toFixed(2)} — Capital protected`);
           await this.closePosition(sym, pos.quantity, "BREAK_EVEN");
         } else {
-          // Original SL hit — controlled loss
           this.log("close", sym, `🛑 STOP LOSS HIT at $${currentPrice.toFixed(2)}`);
           await this.closePosition(sym, pos.quantity, "SL_HIT");
         }
         continue;
       }
 
-      // ---- PHASE 2: CHECK 1.5x TARGET — Partial Close 50% + Move SL to BE ----
+      // ---- PHASE 2: 1.5x REACHED → Close 50% + Move SL to Entry ----
       if (!pos.partialClosed && riskMultiple >= 1.5) {
         const halfQty = this.roundQty(sym, pos.quantity / 2);
         if (halfQty > 0) {
@@ -702,19 +659,18 @@ export class TradingEngine {
             pos.quantity = this.roundQty(sym, pos.quantity - halfQty);
             this.tpHits++;
 
-            // Move SL to break-even (entry price)
+            // Move SL to break-even (entry price) — USER'S EXACT LOGIC
             pos.stopLoss = pos.entryPrice;
             pos.breakEvenMoved = true;
             this.log("info", sym, `🔒 SL moved to Break-Even: $${pos.entryPrice.toFixed(2)} — Remaining: ${pos.quantity}`);
 
-            // Update SL on exchange
             await this.updateStopLoss(sym, pos);
             this.emit("partial_close", { symbol: sym, position: pos });
           }
         }
       }
 
-      // ---- PHASE 3: CHECK 3x TARGET — Close Remaining 50% ----
+      // ---- PHASE 3: 3x REACHED → Close remaining 50% ----
       if (pos.partialClosed && riskMultiple >= 3.0) {
         this.log("close", sym, `🏆 3x FULL TARGET ($${currentPrice.toFixed(2)}) — Closing remaining ${pos.quantity}`);
         this.tpHits++;
@@ -790,25 +746,21 @@ export class TradingEngine {
         state.position = null;
         this.emit("trade_closed", { symbol, pnl: tradePnl, reason, isWin });
 
-        // Sync real balance
         await this.syncBalance();
       } else {
         this.log("error", symbol, `Close failed: ${res.msg}`);
       }
     } catch (e: any) {
       this.log("error", symbol, `Close error: ${e.message}`);
-      // Force clear position state to prevent stuck positions
       state.position = null;
     }
   }
 
-  // ---- Update SL on exchange (cancel old, place new) ----
+  // ---- Update SL on exchange ----
   private async updateStopLoss(symbol: string, pos: ActivePosition) {
     try {
-      // Cancel all open orders for this symbol to remove old SL
       await bingxRequest("POST", "/openApi/swap/v2/trade/cancelAllOpenOrders", { symbol });
 
-      // Place new SL order at break-even
       const closeSide = pos.side === "BUY" ? "SELL" : "BUY";
       await bingxRequest("POST", "/openApi/swap/v2/trade/order", {
         symbol,
