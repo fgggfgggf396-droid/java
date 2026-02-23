@@ -116,9 +116,9 @@
  */
 
 let chart = null, isLive = false, loopInterval = null;
-let balance = 0, capital = 0, secured = 0, isVaultActive = false; // Initialize balance and capital to 0 for live trading
-let btcHistory = [], trades = [], equityPoints = []; // Initialize equityPoints as empty for live data
-let currentPosition = null; // To track open positions
+let balance = 0, capital = 0, secured = 0, isVaultActive = false;
+let btcHistory = [], trades = [], equityPoints = [];
+let currentPosition = null;
 
 // --- العقل السيد (Thinking Core) ---
 const MasterBrain = {
@@ -129,13 +129,12 @@ const MasterBrain = {
     winStreak: 0,
     lossStreak: 0,
 
-    // آلية التطور: العقل يراقب النتائج ويعدل نفسه
     evolve(lastWin) {
         if(lastWin) {
             this.winStreak++;
             this.lossStreak = 0;
             if(this.winStreak >= 2) {
-                this.targetRR = Math.min(this.targetRR + 0.5, 5.5); // طموح أكبر عند النجاح
+                this.targetRR = Math.min(this.targetRR + 0.5, 5.5);
                 this.iq += 10;
                 return "CONFIDENCE UP: EXTENDING PROFIT TARGETS";
             }
@@ -143,7 +142,7 @@ const MasterBrain = {
             this.lossStreak++;
             this.winStreak = 0;
             if(this.lossStreak >= 1) {
-                this.leverage = Math.max(this.leverage - 2, 4); // حذر أكبر عند الخسارة
+                this.leverage = Math.max(this.leverage - 2, 4);
                 this.targetRR = 2.0;
                 this.iq = Math.max(this.iq - 5, 100);
                 return "RISK ADVERSE: SHIFTING TO DEFENSIVE MODE";
@@ -154,7 +153,6 @@ const MasterBrain = {
 };
 
 const AnalysisCore = {
-    // كشف "سحب السيولة" SMC SFP
     getSignal(data) {
         if (data.length < MasterBrain.lookback + 1) return null;
         const curr = data[data.length - 1];
@@ -175,8 +173,8 @@ async function toggleEngine() {
         btn.classList.replace('btn-activate', 'bg-red-500');
         document.getElementById('btn-text').textContent = "إيقاف المحرك الآن";
         document.getElementById('logBody').innerHTML = '';
-        await initializeLiveTrading(); // New function to initialize live trading
-        startLiveProcess(); // New function for live trading loop
+        await initializeLiveTrading();
+        startLiveProcess();
     } else {
         isLive = false;
         clearInterval(loopInterval);
@@ -186,28 +184,34 @@ async function toggleEngine() {
     }
 }
 
+async function fetchBalance() {
+    const res = await fetch('/api/balance');
+    const data = await res.json();
+    if (data.success) {
+        // BingX returns balance in an array or object depending on version
+        // Based on logs: {"code":0,"msg":"","data":[{"userId":"...","asset":"USDT","balance":"196.0145",...}]}
+        if (Array.isArray(data.balance)) {
+            const usdt = data.balance.find(b => b.asset === 'USDT');
+            return usdt ? parseFloat(usdt.balance) : 0;
+        }
+        return parseFloat(data.balance);
+    }
+    throw new Error(data.error || "Failed to fetch balance");
+}
+
 async function initializeLiveTrading() {
     addSpecialLog("🚀 جاري تهيئة العقل للتداول المباشر...");
     try {
-        const balanceRes = await fetch('/api/balance');
-        const balanceData = await balanceRes.json();
-        if (balanceData.success) {
-            balance = balanceData.balance;
-            capital = balanceData.balance; // Set initial capital to current balance
-            equityPoints.push(balance);
-            addSpecialLog(`💰 تم جلب الرصيد بنجاح: $${balance.toFixed(2)}`);
-        } else {
-            throw new Error(balanceData.error);
-        }
+        balance = await fetchBalance();
+        capital = balance;
+        equityPoints.push(balance);
+        addSpecialLog(`💰 تم جلب الرصيد بنجاح: $${balance.toFixed(2)}`);
 
-        // Fetch initial klines for analysis
         const klinesRes = await fetch('/api/klines?interval=1h&limit=100');
         const klinesData = await klinesRes.json();
         if (klinesData.success) {
             btcHistory = klinesData.klines.map(x => ({t:x[0], o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5]}));
             addSpecialLog("📊 تم جلب بيانات الشموع الأولية.");
-        } else {
-            throw new Error(klinesData.error);
         }
 
         initChart();
@@ -223,129 +227,77 @@ async function initializeLiveTrading() {
 
 async function startLiveProcess() {
     loopInterval = setInterval(async () => {
-        if (!isLive) {
-            clearInterval(loopInterval);
-            return;
-        }
+        if (!isLive) return;
 
         try {
-            // Fetch current price and klines
             const priceRes = await fetch('/api/price');
             const priceData = await priceRes.json();
-            if (!priceData.success) throw new Error(priceData.error);
-            const currentPrice = priceData.price;
-            document.getElementById('price-ticker').textContent = `BTC: $${currentPrice.toLocaleString()}`;
+            if (priceData.success) {
+                const currentPrice = priceData.price;
+                document.getElementById('price-ticker').textContent = `BTC: $${currentPrice.toLocaleString()}`;
+            }
 
             const klinesRes = await fetch('/api/klines?interval=1h&limit=100');
             const klinesData = await klinesRes.json();
-            if (!klinesData.success) throw new Error(klinesData.error);
-            btcHistory = klinesData.klines.map(x => ({t:x[0], o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5]}));
+            if (klinesData.success) {
+                btcHistory = klinesData.klines.map(x => ({t:x[0], o:+x[1], h:+x[2], l:+x[3], c:+x[4], v:+x[5]}));
+            }
 
             const signal = AnalysisCore.getSignal(btcHistory);
 
-            // Check for open positions and manage SL/TP
-            if (currentPosition) {
-                // Logic to check if SL/TP hit (client-side for now, ideally server-side)
-                // This part needs more sophisticated implementation, possibly using websockets or more frequent checks
-                // For simplicity, we'll assume server-side SL/TP for now and focus on opening/closing
+            if (!currentPosition && signal) {
+                const riskAmount = balance * 0.05;
+                const currentPrice = btcHistory[btcHistory.length-1].c;
+                const quantity = (riskAmount * MasterBrain.leverage) / currentPrice;
 
-                // If a position is open, we don't open another one
-                addSpecialLog("⚠️ صفقة مفتوحة بالفعل. جاري المراقبة...");
-            } else if (signal) {
-                // Execute trade based on signal
-                const riskAmount = balance * 0.05; // Use a more conservative risk for live trading (5%)
-                const quantity = riskAmount / currentPrice * MasterBrain.leverage; // Calculate quantity based on risk and leverage
-
-                let tradeResponse;
-                if (signal === 'BUY') {
-                    tradeResponse = await fetch('/api/trade/buy', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ quantity, leverage: MasterBrain.leverage })
-                    });
-                } else if (signal === 'SELL') {
-                    tradeResponse = await fetch('/api/trade/sell', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ quantity, leverage: MasterBrain.leverage })
-                    });
-                }
+                const tradeResponse = await fetch(`/api/trade/${signal.toLowerCase()}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quantity, leverage: MasterBrain.leverage })
+                });
 
                 const tradeData = await tradeResponse.json();
-
                 if (tradeData.success) {
-                    currentPosition = { orderId: tradeData.orderId, side: signal, entryPrice: currentPrice, quantity: quantity };
-                    addTradeLog(signal, 0, "ORDER PLACED"); // PnL will be updated when position closes
-                    addSpecialLog(`✅ تم فتح صفقة ${signal} بنجاح! Order ID: ${tradeData.orderId}`);
+                    currentPosition = { orderId: tradeData.orderId, side: signal };
+                    addTradeLog(signal, 0, "ORDER PLACED LIVE");
+                    addSpecialLog(`✅ تم فتح صفقة ${signal} بنجاح!`);
 
-                    // Set Stop Loss (and Take Profit if API supports it directly)
-                    // For now, we'll just set SL. TP needs to be implemented either server-side or with a separate API call if BingX supports it.
-                    const stopPrice = signal === 'BUY' ? currentPrice * (1 - 0.01) : currentPrice * (1 + 0.01); // Example 1% SL
-                    const updateSlRes = await fetch('/api/trade/update-sl', {
+                    const stopPrice = signal === 'BUY' ? currentPrice * 0.99 : currentPrice * 1.01;
+                    await fetch('/api/trade/update-sl', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ orderId: tradeData.orderId, stopPrice: stopPrice })
+                        body: JSON.stringify({ orderId: tradeData.orderId, stopPrice })
                     });
-                    const updateSlData = await updateSlRes.json();
-                    if (updateSlData.success) {
-                        addSpecialLog(`🛡️ تم تعيين وقف الخسارة عند: $${stopPrice.toFixed(2)}`);
-                    } else {
-                        addSpecialLog(`❌ فشل تعيين وقف الخسارة: ${updateSlData.error}`);
-                    }
-
-                    // Implement Take Profit logic here (if BingX API supports it)
-                    // For now, we will rely on manual closing or SL for simplicity.
-
-                } else {
-                    addSpecialLog(`❌ فشل فتح صفقة ${signal}: ${tradeData.error}`);
+                    addSpecialLog(`🛡️ تم تعيين وقف الخسارة عند: $${stopPrice.toFixed(2)}`);
                 }
             }
 
-            // Update balance and equity points (fetch real balance from API)
-            const balanceRes = await fetch('/api/balance');
-            const balanceData = await balanceRes.json();
-            if (balanceData.success) {
-                balance = balanceData.balance;
-                equityPoints.push(balance);
-                updateStats();
-                updateChart();
-            }
+            balance = await fetchBalance();
+            equityPoints.push(balance);
+            updateStats();
+            updateChart();
 
         } catch (e) {
-            addSpecialLog("❌ خطأ في عملية التداول المباشر: " + e.message);
+            console.error(e);
         }
-    }, 5000); // Check every 5 seconds
+    }, 10000);
 }
 
 function updateStats() {
-    // Fetch actual PnL and Win Rate from BingX API if available, or calculate based on closed trades
-    // For now, we'll keep the simulated PnL and WR logic for display purposes, until actual trade history is fetched.
     const currentTotal = balance + secured;
     const net = currentTotal - capital;
     document.getElementById('balance-display').textContent = `$${currentTotal.toFixed(2)}`;
     document.getElementById('secured-display').textContent = `$${secured.toFixed(2)}`;
     document.getElementById('m-pnl').textContent = `${net.toFixed(2)}$`;
     document.getElementById('m-wr').textContent = `${(trades.filter(t=>t.win).length/trades.length*100 || 0).toFixed(1)}%`;
-    
-    const totalW = trades.filter(t=>t.pnl>0).reduce((a,b)=>a+b.pnl,0);
-    const totalL = trades.filter(t=>t.pnl<0).reduce((a,b)=>a+Math.abs(b.pnl),0);
-    document.getElementById('m-pf').textContent = (totalW / (totalL || 1)).toFixed(2);
     document.getElementById('iq-display').textContent = MasterBrain.iq;
     document.getElementById('m-lev').textContent = `${MasterBrain.leverage}x`;
-}
-
-function updateVaultUI() {
-    const card = document.getElementById('vault-card');
-    const tag = document.getElementById('vault-tag');
-    card.classList.add('vault-active');
-    tag.textContent = "ACTIVE & SECURED";
-    tag.classList.replace('opacity-20', 'text-yellow-500');
 }
 
 function addTradeLog(side, pnl, brainMsg) {
     const log = document.getElementById('logBody');
     const div = document.createElement('div');
-    const isWin = pnl > 0;
+    const isWin = pnl >= 0;
     div.className = `p-4 border-r-4 ${isWin ? 'border-emerald-500 bg-emerald-500/5' : 'border-red-500 bg-red-500/5'} rounded-xl log-entry`;
     div.innerHTML = `
         <div class="flex justify-between items-center mb-1">
@@ -373,7 +325,7 @@ function initChart() {
     if(chart) chart.destroy();
     chart = new Chart(ctx, {
         type: 'line',
-        data: { labels: [0], datasets: [{ data: [0], borderColor: '#10b981', borderWidth: 3, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.3 }] },
+        data: { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#10b981', borderWidth: 3, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.3 }] },
         options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.01)' }, ticks: { color: '#444' } } }, plugins: { legend: { display: false } } }
     });
 }
