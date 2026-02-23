@@ -15,10 +15,16 @@
         .master-glow { border: 1px solid var(--alpha) !important; box-shadow: 0 0 50px rgba(16, 185, 129, 0.1); }
         .btn-activate { background: linear-gradient(135deg, #065f46, #10b981); color: #000; font-weight: 900; transition: 0.3s; }
         .btn-activate:hover { transform: scale(1.02); box-shadow: 0 0 40px rgba(16, 185, 129, 0.5); }
+        .btn-stop { background: linear-gradient(135deg, #991b1b, #ef4444); color: #fff; font-weight: 900; transition: 0.3s; }
+        .btn-stop:hover { transform: scale(1.02); box-shadow: 0 0 40px rgba(239, 68, 68, 0.5); }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .log-entry { border-right: 4px solid transparent; animation: slideIn 0.1s ease-out; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
         .speed-tag { background: rgba(16, 185, 129, 0.1); color: var(--alpha); padding: 2px 8px; border-radius: 4px; font-size: 9px; font-weight: 900; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: 6px; }
+        .status-connected { background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
+        .status-disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -35,6 +41,7 @@
                 <div class="flex items-center gap-3">
                     <h1 class="text-4xl font-black tracking-tighter uppercase italic">Sovereign <span class="text-emerald-500">Master-Brain</span></h1>
                     <span class="speed-tag">ULTRA-SPEED WS</span>
+                    <span id="ws-status" class="status-dot status-disconnected" title="WebSocket Status"></span>
                 </div>
                 <p class="text-[10px] text-zinc-500 uppercase tracking-[0.6em] font-bold">Institutional Hybrid Core • Real-Time Execution</p>
             </div>
@@ -114,36 +121,74 @@ let chart = null, isLive = false, ws = null;
 let balance = 0, capital = 0, equityPoints = [];
 let btcHistory = [], currentPosition = null;
 let lastMsgTime = Date.now();
+let wsConnected = false;
+let signalCooldown = false;
+let totalTrades = 0, winTrades = 0;
 
 // --- WebSocket Connection ---
 function connectWS() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${protocol}//${window.location.host}`);
-    
+    try {
+        ws = new WebSocket(`${protocol}//${window.location.host}`);
+    } catch (e) {
+        console.error("WS connection error:", e);
+        setTimeout(connectWS, 3000);
+        return;
+    }
+
+    ws.onopen = () => {
+        wsConnected = true;
+        document.getElementById('ws-status').className = 'status-dot status-connected';
+        document.getElementById('ws-status').title = 'WebSocket Connected';
+        console.log("WS Connected");
+    };
+
     ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        const now = Date.now();
-        document.getElementById('latency-display').textContent = `${now - lastMsgTime}ms`;
-        lastMsgTime = now;
-
-        if (msg.type === 'price') {
-            const price = msg.data;
-            document.getElementById('price-ticker').textContent = `BTC: $${price.toLocaleString()}`;
-            if (isLive) processSignal(price);
-        }
-
-        if (msg.type === 'kline') {
-            const k = msg.data;
-            if (btcHistory.length > 0 && btcHistory[btcHistory.length - 1].t === k.t) {
-                btcHistory[btcHistory.length - 1] = k;
-            } else {
-                btcHistory.push(k);
-                if (btcHistory.length > 100) btcHistory.shift();
+        try {
+            const msg = JSON.parse(event.data);
+            const now = Date.now();
+            const latency = now - lastMsgTime;
+            if (latency < 10000) {
+                document.getElementById('latency-display').textContent = `${latency}ms`;
             }
+            lastMsgTime = now;
+
+            if (msg.type === 'price') {
+                const price = msg.data;
+                if (price > 0) {
+                    document.getElementById('price-ticker').textContent = `BTC: $${price.toLocaleString()}`;
+                    if (isLive && !signalCooldown) processSignal(price);
+                }
+            }
+
+            if (msg.type === 'kline') {
+                const k = msg.data;
+                if (k && k.t) {
+                    if (btcHistory.length > 0 && btcHistory[btcHistory.length - 1].t === k.t) {
+                        btcHistory[btcHistory.length - 1] = k;
+                    } else {
+                        btcHistory.push(k);
+                        if (btcHistory.length > 100) btcHistory.shift();
+                    }
+                }
+            }
+        } catch (e) {
+            // Silent
         }
     };
 
-    ws.onclose = () => setTimeout(connectWS, 3000);
+    ws.onclose = () => {
+        wsConnected = false;
+        document.getElementById('ws-status').className = 'status-dot status-disconnected';
+        document.getElementById('ws-status').title = 'WebSocket Disconnected';
+        console.log("WS Disconnected, reconnecting...");
+        setTimeout(connectWS, 3000);
+    };
+
+    ws.onerror = (err) => {
+        console.error("WS Error:", err);
+        wsConnected = false;
+    };
 }
 
 const MasterBrain = {
@@ -171,91 +216,176 @@ async function toggleEngine() {
     const btn = document.getElementById('mainBtn');
     if (!isLive) {
         isLive = true;
-        btn.classList.replace('btn-activate', 'bg-red-500');
+        btn.className = btn.className.replace('btn-activate', 'btn-stop');
         document.getElementById('btn-text').textContent = "إيقاف المحرك الآن";
         document.getElementById('logBody').innerHTML = '';
-        addSpecialLog("🚀 تم تفعيل المحرك فائق السرعة (WebSocket Mode)");
+        addSpecialLog("تم تفعيل المحرك فائق السرعة (WebSocket Mode)");
         await syncInitialData();
     } else {
         isLive = false;
-        btn.classList.replace('bg-red-500', 'btn-activate');
+        btn.className = btn.className.replace('btn-stop', 'btn-activate');
         document.getElementById('btn-text').textContent = "تفعيل العقل المتطور";
-        addSpecialLog("🛑 تم إيقاف المحرك.");
+        addSpecialLog("تم إيقاف المحرك.");
     }
 }
 
 async function syncInitialData() {
     try {
+        addSpecialLog("جاري تحميل البيانات الأولية...");
+
         const res = await fetch('/api/balance');
         const data = await res.json();
-        balance = data.balance;
-        capital = balance;
-        equityPoints.push(balance);
-        
+        if (data.success) {
+            balance = data.balance;
+            capital = balance;
+            equityPoints.push(balance);
+            addSpecialLog(`المحفظة: $${balance.toFixed(2)}`);
+        } else {
+            addSpecialLog("تحذير: لم يتم جلب الرصيد - " + (data.error || "خطأ غير معروف"));
+        }
+
         const kRes = await fetch('/api/klines');
         const kData = await kRes.json();
-        btcHistory = kData.klines;
-        
+        if (kData.success && kData.klines) {
+            btcHistory = kData.klines;
+            addSpecialLog(`تم تحميل ${btcHistory.length} شمعة`);
+        }
+
+        // Set leverage
+        try {
+            const levRes = await fetch('/api/trade/leverage', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leverage: MasterBrain.leverage })
+            });
+            const levData = await levRes.json();
+            if (levData.success) {
+                addSpecialLog(`الرافعة: ${MasterBrain.leverage}x تم ضبطها`);
+            }
+        } catch (e) {
+            console.warn("Leverage set warning:", e);
+        }
+
         initChart();
         updateStats();
-    } catch (e) { console.error(e); }
+        addSpecialLog("المحرك جاهز للعمل!");
+    } catch (e) {
+        console.error("Sync error:", e);
+        addSpecialLog("خطأ في تحميل البيانات: " + e.message);
+    }
 }
 
 async function processSignal(currentPrice) {
+    if (signalCooldown) return;
+
     const signal = AnalysisCore.getSignal(btcHistory);
-    
+
     // 1. Check for Exit Conditions (SL/TP)
     if (currentPosition) {
-        const pnl = currentPosition.side === 'BUY' ? 
+        const pnl = currentPosition.side === 'BUY' ?
             (currentPrice - currentPosition.entry) : (currentPosition.entry - currentPrice);
         const pnlPercent = (pnl / currentPosition.entry) * 100;
 
         if (pnlPercent <= -0.5 || pnlPercent >= 1.5) {
-            addSpecialLog(`🎯 Closing Position: ${pnlPercent.toFixed(2)}% PnL`);
-            const res = await fetch('/api/trade/close', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ quantity: currentPosition.qty })
-            });
-            const data = await res.json();
-            if (data.success) {
-                addTradeLog(currentPosition.side, pnl * currentPosition.qty, "WS EXIT EXECUTED");
-                currentPosition = null;
-                MasterBrain.evolve(pnl > 0);
-                updateStats();
+            signalCooldown = true;
+            addSpecialLog(`إغلاق الصفقة: ${pnlPercent.toFixed(2)}% PnL`);
+            try {
+                const res = await fetch('/api/trade/close', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ symbol: 'BTC-USDT' })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const tradePnl = pnl * currentPosition.qty;
+                    balance += tradePnl;
+                    equityPoints.push(balance);
+                    totalTrades++;
+                    if (tradePnl > 0) winTrades++;
+                    addTradeLog(currentPosition.side, tradePnl, "WS EXIT EXECUTED");
+                    currentPosition = null;
+                    MasterBrain.evolve(pnl > 0);
+                    updateStats();
+                    updateChart();
+                } else {
+                    addSpecialLog("فشل إغلاق الصفقة: " + (data.msg || ""));
+                }
+            } catch (err) {
+                addSpecialLog("خطأ في إغلاق الصفقة: " + err.message);
             }
+            setTimeout(() => { signalCooldown = false; }, 5000);
+            return;
         }
     }
 
     // 2. Check for Entry Conditions
     if (!currentPosition && signal) {
+        signalCooldown = true;
         const riskAmount = balance * 0.05; // 5% Risk
-        const quantity = (riskAmount * MasterBrain.leverage) / currentPrice;
-        
-        addSpecialLog(`⚡ Signal Detected: ${signal} at $${currentPrice}`);
-        const res = await fetch(`/api/trade/${signal.toLowerCase()}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ quantity, leverage: MasterBrain.leverage })
-        });
-        const data = await res.json();
-        if (data.success) {
-            currentPosition = { id: data.orderId, side: signal, entry: currentPrice, qty: quantity };
-            addTradeLog(signal, 0, "INSTANT WS ENTRY");
-            
-            const sl = signal === 'BUY' ? currentPrice * 0.995 : currentPrice * 1.005;
-            await fetch('/api/trade/update-sl', {
+        const quantity = parseFloat(((riskAmount * MasterBrain.leverage) / currentPrice).toFixed(4));
+
+        if (quantity <= 0) {
+            signalCooldown = false;
+            return;
+        }
+
+        addSpecialLog(`إشارة: ${signal} عند $${currentPrice.toLocaleString()}`);
+
+        // Calculate SL and TP
+        const slPercent = 0.005; // 0.5%
+        const tpPercent = 0.015; // 1.5%
+        let stopLoss, takeProfit;
+
+        if (signal === 'BUY') {
+            stopLoss = parseFloat((currentPrice * (1 - slPercent)).toFixed(2));
+            takeProfit = parseFloat((currentPrice * (1 + tpPercent)).toFixed(2));
+        } else {
+            stopLoss = parseFloat((currentPrice * (1 + slPercent)).toFixed(2));
+            takeProfit = parseFloat((currentPrice * (1 - tpPercent)).toFixed(2));
+        }
+
+        try {
+            const res = await fetch(`/api/trade/${signal.toLowerCase()}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ orderId: data.orderId, stopPrice: sl })
+                body: JSON.stringify({
+                    quantity,
+                    leverage: MasterBrain.leverage,
+                    stopLoss,
+                    takeProfit
+                })
             });
+            const data = await res.json();
+            if (data.success) {
+                currentPosition = {
+                    id: data.orderId,
+                    side: signal,
+                    entry: currentPrice,
+                    qty: quantity,
+                    sl: stopLoss,
+                    tp: takeProfit
+                };
+                addTradeLog(signal, 0, `ENTRY | SL: $${stopLoss} | TP: $${takeProfit}`);
+                updateStats();
+            } else {
+                addSpecialLog("فشل فتح الصفقة: " + (data.msg || JSON.stringify(data.error || "")));
+            }
+        } catch (err) {
+            addSpecialLog("خطأ في فتح الصفقة: " + err.message);
         }
+        setTimeout(() => { signalCooldown = false; }, 10000);
     }
 }
 
 function updateStats() {
     document.getElementById('balance-display').textContent = `$${balance.toFixed(2)}`;
-    document.getElementById('m-pnl').textContent = `${(balance - capital).toFixed(2)}$`;
+    const pnl = balance - capital;
+    const pnlEl = document.getElementById('m-pnl');
+    pnlEl.textContent = `${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}$`;
+    pnlEl.className = `text-3xl font-black mono ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+
+    const wr = totalTrades > 0 ? ((winTrades / totalTrades) * 100).toFixed(1) : '—';
+    document.getElementById('m-wr').textContent = totalTrades > 0 ? `${wr}%` : '—';
     document.getElementById('iq-display').textContent = MasterBrain.iq;
     document.getElementById('m-lev').textContent = `${MasterBrain.leverage}x`;
 }
@@ -263,8 +393,12 @@ function updateStats() {
 function addTradeLog(side, pnl, msg) {
     const log = document.getElementById('logBody');
     const div = document.createElement('div');
-    div.className = `p-4 border-r-4 border-emerald-500 bg-emerald-500/5 rounded-xl log-entry`;
-    div.innerHTML = `<div class="flex justify-between items-center mb-1"><span class="font-black text-white text-[10px] uppercase">${side} EXECUTED</span><span class="mono font-bold text-emerald-400">${pnl.toFixed(2)}$</span></div><div class="text-[8px] text-zinc-500 font-bold uppercase">🧠 ${msg}</div>`;
+    const isProfit = pnl >= 0;
+    const borderColor = side === 'BUY' ? 'border-emerald-500' : 'border-red-500';
+    const bgColor = side === 'BUY' ? 'bg-emerald-500/5' : 'bg-red-500/5';
+    const pnlColor = isProfit ? 'text-emerald-400' : 'text-red-400';
+    div.className = `p-4 border-r-4 ${borderColor} ${bgColor} rounded-xl log-entry`;
+    div.innerHTML = `<div class="flex justify-between items-center mb-1"><span class="font-black text-white text-[10px] uppercase">${side} EXECUTED</span><span class="mono font-bold ${pnlColor}">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}$</span></div><div class="text-[8px] text-zinc-500 font-bold uppercase">${msg}</div><div class="text-[7px] text-zinc-700 mt-1">${new Date().toLocaleTimeString('ar-SA')}</div>`;
     log.prepend(div);
 }
 
@@ -272,19 +406,48 @@ function addSpecialLog(msg) {
     const log = document.getElementById('logBody');
     const div = document.createElement('div');
     div.className = "p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-500 font-bold text-center text-[10px]";
-    div.innerHTML = msg;
+    div.innerHTML = `${msg} <span class="text-[7px] text-zinc-600 block">${new Date().toLocaleTimeString('ar-SA')}</span>`;
     log.prepend(div);
 }
 
 function initChart() {
     const ctx = document.getElementById('mainChart').getContext('2d');
+    if (chart) chart.destroy();
     chart = new Chart(ctx, {
         type: 'line',
-        data: { labels: equityPoints.map((_,i)=>i), datasets: [{ data: equityPoints, borderColor: '#10b981', borderWidth: 2, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.4 }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { x: { display: false }, y: { grid: { display: false } } }, plugins: { legend: { display: false } } }
+        data: {
+            labels: equityPoints.map((_, i) => i),
+            datasets: [{
+                data: equityPoints,
+                borderColor: '#10b981',
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: true,
+                backgroundColor: 'rgba(16, 185, 129, 0.05)',
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { display: false },
+                y: { grid: { display: false } }
+            },
+            plugins: { legend: { display: false } }
+        }
     });
 }
 
+function updateChart() {
+    if (chart) {
+        chart.data.labels = equityPoints.map((_, i) => i);
+        chart.data.datasets[0].data = equityPoints;
+        chart.update('none');
+    }
+}
+
+// Start WebSocket connection
 connectWS();
 </script>
 </body>
