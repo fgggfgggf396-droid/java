@@ -1,6 +1,7 @@
 // ============================================================================
-// 🧠 STRUCTURAL INTELLIGENCE TRADING ENGINE v2.0
-// Liquidity Reader — Dual-Core (BTC + ETH) — Runs 24/7 Server-Side
+// 🧠 INSTITUTIONAL GUARD — The Third Proposal Engine v3.0
+// Dual-Core (BTC + ETH) | 24/7 Autonomous | Cross Margin | 10x
+// Protocol: SFP Entry → Structural SL → 50% Exit @ 1.5x → BE → 3x Full Exit
 // ============================================================================
 
 import axios from "axios";
@@ -31,6 +32,7 @@ interface ActivePosition {
   stopLoss: number;
   takeProfit1x5: number;  // 1.5x risk target (partial close)
   takeProfit3x: number;   // 3x risk target (full close)
+  riskAmount: number;     // dollar risk for this trade
   riskPerUnit: number;    // |entry - SL| per unit
   partialClosed: boolean; // has 50% been closed?
   breakEvenMoved: boolean;
@@ -39,7 +41,7 @@ interface ActivePosition {
 
 interface SymbolState {
   symbol: string;
-  bingxSymbol: string;   // "BTC-USDT" or "ETH-USDT"
+  bingxSymbol: string;
   price: number;
   klines: Kline[];
   position: ActivePosition | null;
@@ -54,7 +56,6 @@ interface EngineStats {
   totalPnl: number;
   balance: number;
   startBalance: number;
-  iq: number;
   leverage: number;
   isRunning: boolean;
   symbols: Record<string, {
@@ -64,6 +65,7 @@ interface EngineStats {
     position: ActivePosition | null;
   }>;
   logs: LogEntry[];
+  tpHits: number;
 }
 
 interface LogEntry {
@@ -77,7 +79,7 @@ interface LogEntry {
 type EventCallback = (event: string, data: any) => void;
 
 // ============================================================================
-// 🔐 CONFIG
+// 🔐 CONFIG — The Third Proposal Parameters
 // ============================================================================
 
 const CONFIG = {
@@ -86,21 +88,20 @@ const CONFIG = {
   REST_URL: "https://open-api.bingx.com",
   WS_URL: "wss://open-api-swap.bingx.com/swap-market",
 
+  // Dual-Core Symbols
   SYMBOLS: ["BTC-USDT", "ETH-USDT"] as const,
-  RISK_PERCENT: 0.05,        // 5% risk per trade
-  SL_BUFFER_PERCENT: 0.0005, // 0.05% safety buffer
-  WICK_BODY_RATIO: 1.5,      // Minimum wick:body ratio for quality filter
-  LOOKBACK_CANDLES: 30,       // SFP lookback period
-  SIGNAL_COOLDOWN_MS: 15000,  // 15s cooldown between signals per symbol
-  MAX_CONCURRENT: 2,          // Max 2 positions (1 per symbol)
 
-  INITIAL_LEVERAGE: 10,
-  MIN_LEVERAGE: 5,
-  MAX_LEVERAGE: 20,
-  IQ_WIN_BOOST: 5,
-  IQ_LOSS_PENALTY: 2,
-  LEVERAGE_WIN_BOOST: 1,
-  LEVERAGE_LOSS_PENALTY: 1,
+  // Financial Framework — The Third Proposal
+  RISK_PERCENT: 0.05,          // 5% risk per trade (cumulative from live balance)
+  LEVERAGE: 10,                // Fixed 10x Cross Margin
+  MARGIN_MODE: "CROSSED",     // Cross Margin for maximum protection
+
+  // SFP Detection
+  SL_BUFFER_PERCENT: 0.0005,  // 0.05% safety buffer behind wick
+  WICK_BODY_RATIO: 1.5,       // Minimum wick:body ratio for quality filter
+  LOOKBACK_CANDLES: 30,        // SFP lookback period
+  SIGNAL_COOLDOWN_MS: 15000,   // 15s cooldown between signals per symbol
+  MAX_CONCURRENT: 2,           // Max 2 positions (1 BTC + 1 ETH)
 
   // Minimum quantities
   MIN_QTY: { "BTC-USDT": 0.001, "ETH-USDT": 0.01 } as Record<string, number>,
@@ -150,7 +151,7 @@ async function bingxRequest(method: "GET" | "POST", endpoint: string, params: Re
 }
 
 // ============================================================================
-// 🧠 STRUCTURAL INTELLIGENCE TRADING ENGINE CLASS
+// 🧠 INSTITUTIONAL GUARD ENGINE CLASS
 // ============================================================================
 
 export class TradingEngine {
@@ -163,12 +164,12 @@ export class TradingEngine {
   private isRunning = false;
   private balance = 0;
   private startBalance = 0;
-  private iq = 100;
-  private leverage: number = CONFIG.INITIAL_LEVERAGE;
+  private leverage: number = CONFIG.LEVERAGE;
   private totalTrades = 0;
   private winTrades = 0;
   private lossTrades = 0;
   private totalPnl = 0;
+  private tpHits = 0;
   private logs: LogEntry[] = [];
   private eventCallbacks: EventCallback[] = [];
 
@@ -209,7 +210,7 @@ export class TradingEngine {
   async start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.log("info", "SYSTEM", "🚀 Structural Intelligence Engine v2.0 starting...");
+    this.log("info", "SYSTEM", "🚀 Institutional Guard v3.0 — The Third Proposal Engine starting...");
 
     // Fetch balance
     await this.syncBalance();
@@ -218,11 +219,11 @@ export class TradingEngine {
 
     // Set margin mode to CROSS for all symbols
     for (const sym of CONFIG.SYMBOLS) {
-      await this.setMarginMode(sym, "CROSSED");
+      await this.setMarginMode(sym, CONFIG.MARGIN_MODE as "CROSSED");
     }
 
-    // Set leverage for all symbols
-    await this.setLeverageAll(this.leverage);
+    // Set leverage 10x for all symbols
+    await this.setLeverageAll(CONFIG.LEVERAGE);
 
     // Load initial klines
     for (const sym of CONFIG.SYMBOLS) {
@@ -235,7 +236,7 @@ export class TradingEngine {
     // Start position monitor (checks SL/TP/partial every 500ms)
     this.monitorInterval = setInterval(() => this.monitorPositions(), 500);
 
-    this.log("info", "SYSTEM", `✅ Engine running | Symbols: ${CONFIG.SYMBOLS.join(", ")} | Leverage: ${this.leverage}x | Risk: ${CONFIG.RISK_PERCENT * 100}%`);
+    this.log("info", "SYSTEM", `✅ Engine running | Symbols: ${CONFIG.SYMBOLS.join(", ")} | Leverage: ${CONFIG.LEVERAGE}x | Risk: ${CONFIG.RISK_PERCENT * 100}% | Margin: CROSS`);
     this.emit("started", this.getStats());
   }
 
@@ -269,11 +270,11 @@ export class TradingEngine {
       totalPnl: this.totalPnl,
       balance: this.balance,
       startBalance: this.startBalance,
-      iq: this.iq,
       leverage: this.leverage,
       isRunning: this.isRunning,
       symbols: symbolStats,
       logs: this.logs.slice(-100),
+      tpHits: this.tpHits,
     };
   }
 
@@ -309,7 +310,6 @@ export class TradingEngine {
       await bingxRequest("POST", "/openApi/swap/v2/trade/marginType", { symbol, marginType: mode });
       this.log("info", symbol, `📐 Margin mode set to ${mode}`);
     } catch (e: any) {
-      // May already be set — not critical
       this.log("info", symbol, `📐 Margin mode: ${mode} (may already be set)`);
     }
   }
@@ -324,18 +324,6 @@ export class TradingEngine {
       } catch (e: any) {
         this.log("error", sym, `Leverage error: ${e.message}`);
       }
-    }
-  }
-
-  private evolveLeverage(win: boolean) {
-    this.iq += win ? CONFIG.IQ_WIN_BOOST : -CONFIG.IQ_LOSS_PENALTY;
-    const oldLev = this.leverage;
-    this.leverage = win
-      ? Math.min(this.leverage + CONFIG.LEVERAGE_WIN_BOOST, CONFIG.MAX_LEVERAGE)
-      : Math.max(this.leverage - CONFIG.LEVERAGE_LOSS_PENALTY, CONFIG.MIN_LEVERAGE);
-    if (oldLev !== this.leverage) {
-      this.log("info", "SYSTEM", `🧠 IQ: ${this.iq} | Leverage: ${oldLev}x → ${this.leverage}x`);
-      this.setLeverageAll(this.leverage).catch(() => {});
     }
   }
 
@@ -365,7 +353,7 @@ export class TradingEngine {
   }
 
   // ============================================================================
-  // 📡 WebSocket — Dual Symbol Monitoring
+  // 📡 WebSocket — Ultra-Low Latency Dual Symbol Monitoring
   // ============================================================================
 
   private connectWS() {
@@ -380,7 +368,7 @@ export class TradingEngine {
     }
 
     this.ws.on("open", () => {
-      this.log("info", "SYSTEM", "🔌 WebSocket connected — subscribing to dual symbols");
+      this.log("info", "SYSTEM", "🔌 WebSocket connected — subscribing to dual symbols (Zero Latency)");
 
       // Subscribe to BOTH symbols
       for (const sym of CONFIG.SYMBOLS) {
@@ -413,7 +401,7 @@ export class TradingEngine {
             const state = this.symbols.get(sym);
             if (!state) continue;
 
-            // Trade data → price update
+            // Trade data → price update (ultra-low latency)
             if (dataType.endsWith("@trade")) {
               const trades = json.data;
               let newPrice = 0;
@@ -449,7 +437,7 @@ export class TradingEngine {
                   state.klines.push(kline);
                   if (state.klines.length > 200) state.klines.shift();
 
-                  // New candle closed → analyze for signal (only on new candle)
+                  // New candle closed → analyze for SFP signal
                   if (this.isRunning) {
                     this.analyzeAndTrade(sym).catch((e) => {
                       this.log("error", sym, `Analysis error: ${e.message}`);
@@ -460,7 +448,7 @@ export class TradingEngine {
                 this.emit("kline", { symbol: sym, kline });
               }
             }
-            break; // Found the symbol, no need to check others
+            break;
           }
         }
       } catch (e) {
@@ -503,7 +491,6 @@ export class TradingEngine {
 
     // ---- BULLISH SFP: Price swept below support then closed above ----
     if (current.l < lowestLow && current.c > lowestLow) {
-      // Quality filter: lower wick must be >= 1.5x body
       const lowerWick = Math.min(current.o, current.c) - current.l;
       if (lowerWick / body >= CONFIG.WICK_BODY_RATIO) {
         return { signal: "BUY", sweepCandle: current };
@@ -512,7 +499,6 @@ export class TradingEngine {
 
     // ---- BEARISH SFP: Price swept above resistance then closed below ----
     if (current.h > highestHigh && current.c < highestHigh) {
-      // Quality filter: upper wick must be >= 1.5x body
       const upperWick = current.h - Math.max(current.o, current.c);
       if (upperWick / body >= CONFIG.WICK_BODY_RATIO) {
         return { signal: "SELL", sweepCandle: current };
@@ -523,7 +509,8 @@ export class TradingEngine {
   }
 
   // ============================================================================
-  // 📊 ANALYZE & TRADE — Core Decision Loop
+  // 📊 ANALYZE & TRADE — The Third Proposal Core Logic
+  // Protocol: SFP → Structural SL → 50% @ 1.5x → BE → 3x Full
   // ============================================================================
 
   private async analyzeAndTrade(symbol: string) {
@@ -536,7 +523,7 @@ export class TradingEngine {
     // Already has a position on this symbol
     if (state.position) return;
 
-    // Max concurrent positions check
+    // Max concurrent positions check (1 BTC + 1 ETH max)
     let activeCount = 0;
     for (const [, s] of this.symbols) {
       if (s.position) activeCount++;
@@ -553,7 +540,10 @@ export class TradingEngine {
     // Refresh balance before trade
     await this.syncBalance();
 
-    // Calculate position size based on 5% risk
+    // ============================================================
+    // THE THIRD PROPOSAL — Financial Framework
+    // Risk: 5% of live balance (cumulative)
+    // ============================================================
     const riskAmount = this.balance * CONFIG.RISK_PERCENT;
     const buffer = CONFIG.SL_BUFFER_PERCENT;
 
@@ -571,8 +561,8 @@ export class TradingEngine {
     const riskPerUnit = Math.abs(entryPrice - stopLoss);
     if (riskPerUnit <= 0) return;
 
-    // Position size: risk / riskPerUnit (with leverage)
-    let quantity = (riskAmount * this.leverage) / entryPrice;
+    // Position size: (riskAmount * leverage) / entryPrice
+    let quantity = (riskAmount * CONFIG.LEVERAGE) / entryPrice;
     const minQty = CONFIG.MIN_QTY[symbol] || 0.001;
 
     // Round to appropriate precision
@@ -587,7 +577,7 @@ export class TradingEngine {
       return;
     }
 
-    // Calculate TP targets
+    // Calculate TP targets based on risk distance
     const tp1x5 = sfp.signal === "BUY"
       ? entryPrice + riskPerUnit * 1.5
       : entryPrice - riskPerUnit * 1.5;
@@ -596,16 +586,16 @@ export class TradingEngine {
       ? entryPrice + riskPerUnit * 3
       : entryPrice - riskPerUnit * 3;
 
-    this.log("trade", symbol, `📈 Opening ${sfp.signal}: qty=${quantity}, entry=$${entryPrice.toFixed(2)}, SL=$${stopLoss.toFixed(2)}, TP1.5x=$${tp1x5.toFixed(2)}, TP3x=$${tp3x.toFixed(2)}`);
+    this.log("trade", symbol, `📈 Opening ${sfp.signal}: qty=${quantity}, entry=$${entryPrice.toFixed(2)}, SL=$${stopLoss.toFixed(2)}, TP1.5x=$${tp1x5.toFixed(2)}, TP3x=$${tp3x.toFixed(2)} | Risk: $${riskAmount.toFixed(2)}`);
 
     try {
-      // Set leverage before order
+      // Set leverage before order (always 10x)
       const positionSide = sfp.signal === "BUY" ? "LONG" : "SHORT";
       await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", {
-        symbol, side: positionSide, leverage: this.leverage,
+        symbol, side: positionSide, leverage: CONFIG.LEVERAGE,
       });
 
-      // Place market order with SL at structural level
+      // Place market order with structural SL
       const orderParams: Record<string, any> = {
         symbol,
         side: sfp.signal,
@@ -643,6 +633,7 @@ export class TradingEngine {
           stopLoss,
           takeProfit1x5: actualTp1x5,
           takeProfit3x: actualTp3x,
+          riskAmount,
           riskPerUnit: actualRiskPerUnit,
           partialClosed: false,
           breakEvenMoved: false,
@@ -660,7 +651,10 @@ export class TradingEngine {
   }
 
   // ============================================================================
-  // 🔄 POSITION MONITOR — SL/TP/Partial Close Logic (runs every 500ms)
+  // 🔄 POSITION MONITOR — The Third Proposal Protocol (runs every 500ms)
+  // Phase 1: SL Hit → Cut loss immediately
+  // Phase 2: 1.5x reached → Close 50% + Move SL to Break-Even
+  // Phase 3: 3x reached → Close remaining 50%
   // ============================================================================
 
   private async monitorPositions() {
@@ -677,33 +671,41 @@ export class TradingEngine {
         ? currentPrice - pos.entryPrice
         : pos.entryPrice - currentPrice;
 
-      const riskMultiple = pnlPerUnit / pos.riskPerUnit;
+      const riskMultiple = pos.riskPerUnit > 0 ? pnlPerUnit / pos.riskPerUnit : 0;
 
-      // ---- CHECK STOP LOSS HIT (programmatic SL as backup) ----
+      // ---- PHASE 1: CHECK STOP LOSS HIT (programmatic SL as backup) ----
       const slHit = pos.side === "BUY"
         ? currentPrice <= pos.stopLoss
         : currentPrice >= pos.stopLoss;
 
       if (slHit) {
-        this.log("close", sym, `🛑 STOP LOSS HIT at $${currentPrice.toFixed(2)}`);
-        await this.closePosition(sym, pos.quantity, "SL_HIT");
+        if (pos.breakEvenMoved) {
+          // SL was at break-even — this is a scratch trade (no loss)
+          this.log("close", sym, `🔒 BREAK-EVEN EXIT at $${currentPrice.toFixed(2)} — Capital protected`);
+          await this.closePosition(sym, pos.quantity, "BREAK_EVEN");
+        } else {
+          // Original SL hit — controlled loss
+          this.log("close", sym, `🛑 STOP LOSS HIT at $${currentPrice.toFixed(2)}`);
+          await this.closePosition(sym, pos.quantity, "SL_HIT");
+        }
         continue;
       }
 
-      // ---- CHECK 1.5x TARGET — Partial Close 50% ----
+      // ---- PHASE 2: CHECK 1.5x TARGET — Partial Close 50% + Move SL to BE ----
       if (!pos.partialClosed && riskMultiple >= 1.5) {
         const halfQty = this.roundQty(sym, pos.quantity / 2);
         if (halfQty > 0) {
-          this.log("partial", sym, `🎯 1.5x reached ($${currentPrice.toFixed(2)}) — Closing 50% (${halfQty})`);
+          this.log("partial", sym, `🎯 1.5x REACHED ($${currentPrice.toFixed(2)}) — Closing 50% (${halfQty}) + Moving SL to Entry`);
           const success = await this.closePartial(sym, halfQty);
           if (success) {
             pos.partialClosed = true;
             pos.quantity = this.roundQty(sym, pos.quantity - halfQty);
+            this.tpHits++;
 
-            // Move SL to break-even
+            // Move SL to break-even (entry price)
             pos.stopLoss = pos.entryPrice;
             pos.breakEvenMoved = true;
-            this.log("info", sym, `🔒 SL moved to Break-Even: $${pos.entryPrice.toFixed(2)}`);
+            this.log("info", sym, `🔒 SL moved to Break-Even: $${pos.entryPrice.toFixed(2)} — Remaining: ${pos.quantity}`);
 
             // Update SL on exchange
             await this.updateStopLoss(sym, pos);
@@ -712,9 +714,10 @@ export class TradingEngine {
         }
       }
 
-      // ---- CHECK 3x TARGET — Close Remaining 50% ----
+      // ---- PHASE 3: CHECK 3x TARGET — Close Remaining 50% ----
       if (pos.partialClosed && riskMultiple >= 3.0) {
-        this.log("close", sym, `🏆 3x TARGET reached ($${currentPrice.toFixed(2)}) — Closing remaining`);
+        this.log("close", sym, `🏆 3x FULL TARGET ($${currentPrice.toFixed(2)}) — Closing remaining ${pos.quantity}`);
+        this.tpHits++;
         await this.closePosition(sym, pos.quantity, "TP_3X");
       }
     }
@@ -773,18 +776,16 @@ export class TradingEngine {
           ? state.price - pos.entryPrice
           : pos.entryPrice - state.price;
         const tradePnl = pnlPerUnit * quantity;
-        const totalTradePnl = pnlPerUnit * pos.originalQuantity; // approximate
 
         this.totalPnl += tradePnl;
         this.balance += tradePnl;
         this.totalTrades++;
 
-        const isWin = totalTradePnl > 0;
+        const isWin = reason === "TP_3X" || reason === "BREAK_EVEN" || tradePnl > 0;
         if (isWin) this.winTrades++; else this.lossTrades++;
 
-        this.evolveLeverage(isWin);
-
-        this.log("close", symbol, `${isWin ? "🟢" : "🔴"} ${reason}: PnL $${tradePnl.toFixed(4)} | Total: $${this.totalPnl.toFixed(4)}`, tradePnl);
+        const emoji = reason === "TP_3X" ? "🏆" : reason === "BREAK_EVEN" ? "🔒" : tradePnl > 0 ? "🟢" : "🔴";
+        this.log("close", symbol, `${emoji} ${reason}: PnL $${tradePnl.toFixed(4)} | Balance: $${this.balance.toFixed(2)} | Total PnL: $${this.totalPnl.toFixed(4)}`, tradePnl);
 
         state.position = null;
         this.emit("trade_closed", { symbol, pnl: tradePnl, reason, isWin });
@@ -807,7 +808,7 @@ export class TradingEngine {
       // Cancel all open orders for this symbol to remove old SL
       await bingxRequest("POST", "/openApi/swap/v2/trade/cancelAllOpenOrders", { symbol });
 
-      // Place new SL order
+      // Place new SL order at break-even
       const closeSide = pos.side === "BUY" ? "SELL" : "BUY";
       await bingxRequest("POST", "/openApi/swap/v2/trade/order", {
         symbol,

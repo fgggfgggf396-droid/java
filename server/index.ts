@@ -1,6 +1,6 @@
 // ============================================================================
-// 🚀 SOVEREIGN MASTER-BRAIN v2.0 — Structural Intelligence Server
-// Dual-Core (BTC + ETH) | 24/7 Autonomous | Liquidity Reader
+// 🚀 INSTITUTIONAL GUARD v3.0 — The Third Proposal Server
+// Dual-Core (BTC + ETH) | 24/7 Autonomous | Cross Margin | 10x
 // ============================================================================
 
 import express from "express";
@@ -65,6 +65,7 @@ async function startServer() {
     res.json({
       success: true,
       status: stats.isRunning ? "running" : "stopped",
+      version: "v3.0 — The Third Proposal",
       symbols: Object.keys(stats.symbols),
       prices: Object.fromEntries(
         Object.entries(stats.symbols).map(([k, v]) => [k, v.price])
@@ -147,15 +148,15 @@ async function startServer() {
   // ---- Start Server ----
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`🚀 Sovereign Master-Brain v2.0 running on port ${port}`);
-    console.log(`🧠 Structural Intelligence Engine — Dual Core (BTC + ETH)`);
+    console.log(`🚀 Institutional Guard v3.0 — The Third Proposal running on port ${port}`);
+    console.log(`🧠 Dual-Core (BTC + ETH) | 10x Cross Margin | 5% Risk`);
     console.log(`📡 WebSocket bridge active for browser clients`);
   });
 
   // ---- Auto-start engine on server boot (24/7 autonomous) ----
   try {
     await engine.start();
-    console.log("✅ Engine auto-started successfully");
+    console.log("✅ Engine auto-started successfully — running 24/7");
   } catch (e: any) {
     console.error("⚠️ Engine auto-start failed:", e.message);
     console.log("Engine can be started manually via POST /api/engine/start");
