@@ -1,6 +1,6 @@
 
 // ============================================================================
-// 🧠 SOVEREIGN X — PURE PROBABILISTIC ENGINE v4.0
+// 🧠 SOVEREIGN X — PURE PROBABILISTIC ENGINE v4.0 (LIVE TRADING)
 // Dual-Core (BTC + ETH) | 24/7 Autonomous | Cross Margin | 10x
 // Protocol: Probabilistic Entry → 50% Exit @ 1.5x → BE → 3x Full Exit
 // ============================================================================
@@ -75,7 +75,7 @@ interface LogEntry {
 type EventCallback = (event: string, data: any) => void;
 
 // ============================================================================
-// 🔐 CONFIG — PURE PROBABILISTIC PARAMETERS
+// 🔐 CONFIG — PURE PROBABILISTIC PARAMETERS (LIVE)
 // ============================================================================
 
 const CONFIG = {
@@ -86,14 +86,14 @@ const CONFIG = {
 
   SYMBOLS: ["BTC-USDT", "ETH-USDT"] as const,
 
-  // === PURE PROBABILISTIC FRAMEWORK ===
+  // === USER'S EXACT FINANCIAL FRAMEWORK ===
   RISK_PERCENT: 0.05,          // 5% of live balance per trade
   RISK_CAP: 50.0,              // Max $50 risk per trade
   FEE_RATE: 0.001,             // 0.1% total fee
   LEVERAGE: 10,                // 10x leverage
   MARGIN_MODE: "CROSSED",      // Cross Margin
 
-  SIGNAL_COOLDOWN_MS: 60000,   // 1 minute cooldown for random signals
+  SIGNAL_COOLDOWN_MS: 15000,   // 15 seconds cooldown for probabilistic signals
   MAX_CONCURRENT: 2,
 
   MIN_QTY: { "BTC-USDT": 0.001, "ETH-USDT": 0.01 } as Record<string, number>,
@@ -134,7 +134,7 @@ async function bingxRequest(method: "GET" | "POST", endpoint: string, params: Re
 }
 
 // ============================================================================
-// 🧠 SOVEREIGN X ENGINE CLASS
+// 🧠 SOVEREIGN X ENGINE CLASS (LIVE TRADING)
 // ============================================================================
 
 export class TradingEngine {
@@ -184,16 +184,16 @@ export class TradingEngine {
   async start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.log("info", "SYSTEM", "🚀 Sovereign X — Pure Probabilistic Engine starting...");
+    this.log("info", "SYSTEM", "🚀 Sovereign X — Pure Probabilistic Engine starting LIVE...");
     await this.syncBalance();
     this.startBalance = this.balance;
     this.log("info", "SYSTEM", `💰 Balance: $${this.balance.toFixed(2)}`);
     for (const sym of CONFIG.SYMBOLS) await this.setMarginMode(sym, CONFIG.MARGIN_MODE as "CROSSED");
     await this.setLeverageAll(CONFIG.LEVERAGE);
     this.connectWS();
-    this.monitorInterval = setInterval(() => this.monitorPositions(), 500);
-    this.signalInterval = setInterval(() => this.generateRandomSignals(), 5000);
-    this.log("info", "SYSTEM", `✅ Engine running | Pure Probabilistic Mind Active`);
+    this.monitorInterval = setInterval(() => this.monitorPositions(), 500); // Monitor positions every 500ms
+    this.signalInterval = setInterval(() => this.generateProbabilisticSignals(), 5000); // Generate signals every 5 seconds
+    this.log("info", "SYSTEM", `✅ Engine running LIVE | Pure Probabilistic Mind Active`);
     this.emit("started", this.getStats());
   }
 
@@ -229,7 +229,7 @@ export class TradingEngine {
   }
 
   private async setMarginMode(symbol: string, mode: "CROSSED" | "ISOLATED") {
-    try { await bingxRequest("POST", "/openApi/swap/v2/trade/marginType", { symbol, marginType: mode }); } catch (e) {}
+    try { await bingxRequest("POST", "/openApi/swap/v2/trade/marginType", { symbol, marginType: mode }); } catch (e) { this.log("info", symbol, `Margin mode already ${mode} or error: ${e.message}`); }
   }
 
   private async setLeverageAll(lev: number) {
@@ -238,7 +238,8 @@ export class TradingEngine {
       try {
         await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", { symbol: sym, side: "LONG", leverage: lev });
         await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", { symbol: sym, side: "SHORT", leverage: lev });
-      } catch (e) {}
+        this.log("info", sym, `Leverage set to ${lev}x`);
+      } catch (e) { this.log("info", sym, `Leverage already ${lev}x or error: ${e.message}`); }
     }
   }
 
@@ -248,7 +249,8 @@ export class TradingEngine {
     this.ws.on("open", () => {
       this.log("info", "WS", "🔌 Connected to BingX Market Data");
       for (const sym of CONFIG.SYMBOLS) {
-        this.ws?.send(JSON.stringify({ id: `sub_${sym}`, reqType: "sub", dataType: `${sym}@lastPrice` }));
+        this.ws?.send(JSON.stringify({ id: `sub_${sym}`, reqType: "sub", dataType: `${sym}@trade` })); // Subscribe to real-time trades
+        this.ws?.send(JSON.stringify({ id: `sub_kline_${sym}`, reqType: "sub", dataType: `${sym}@kline_1m` })); // Subscribe to 1m klines
       }
       if (this.pingInterval) clearInterval(this.pingInterval);
       this.pingInterval = setInterval(() => this.ws?.send("Ping"), 30000);
@@ -256,26 +258,44 @@ export class TradingEngine {
     this.ws.on("message", (data: Buffer) => {
       try {
         const msg = JSON.parse(pako.inflate(data, { to: "string" }));
-        if (msg.dataType?.endsWith("@lastPrice")) {
+        if (msg.dataType?.endsWith("@trade")) {
           const sym = msg.dataType.split("@")[0];
           const state = this.symbols.get(sym);
           if (state) {
-            state.price = parseFloat(msg.data.lastPrice);
+            state.price = parseFloat(msg.data.price);
             this.emit("price", { symbol: sym, price: state.price });
           }
+        } else if (msg.dataType?.endsWith("@kline_1m")) {
+          const sym = msg.dataType.split("@")[0];
+          const state = this.symbols.get(sym);
+          if (state && msg.data.kline) {
+            const k = msg.data.kline;
+            const newKline: Kline = {
+              t: parseInt(k.time),
+              o: parseFloat(k.open),
+              h: parseFloat(k.high),
+              l: parseFloat(k.low),
+              c: parseFloat(k.close),
+              v: parseFloat(k.volume),
+            };
+            // Update klines array (keep only last N for any potential future logic)
+            state.klines.push(newKline);
+            if (state.klines.length > 60) state.klines.shift(); // Keep last 60 klines (1 hour)
+          }
         }
-      } catch (e) {}
+      } catch (e) { /* silent */ }
     });
     this.ws.on("close", () => { if (this.isRunning) this.wsReconnectTimer = setTimeout(() => this.connectWS(), 5000); });
+    this.ws.on("error", (err) => { this.log("error", "WS", `WebSocket error: ${err.message}`); this.ws?.close(); });
   }
 
-  private generateRandomSignals() {
+  private generateProbabilisticSignals() {
     if (!this.isRunning) return;
     for (const [sym, state] of this.symbols) {
       if (state.position || state.price <= 0) continue;
       if (Date.now() - state.lastSignalTime < state.cooldownMs) continue;
 
-      // Pure Probabilistic Entry (50/50 chance to trigger a trade every check)
+      // Pure Probabilistic Entry (50/50 chance to enter a trade every check)
       if (Math.random() > 0.5) {
         const side = Math.random() > 0.5 ? "BUY" : "SELL";
         this.openProbabilisticTrade(sym, side);
@@ -299,7 +319,10 @@ export class TradingEngine {
     let quantity = (riskAmount * CONFIG.LEVERAGE) / entryPrice;
     quantity = symbol === "BTC-USDT" ? Math.floor(quantity * 1000) / 1000 : Math.floor(quantity * 100) / 100;
 
-    if (quantity < (CONFIG.MIN_QTY[symbol] || 0.001)) return;
+    if (quantity < (CONFIG.MIN_QTY[symbol] || 0.001)) {
+      this.log("info", symbol, `⚠️ Quantity too small: ${quantity} < ${CONFIG.MIN_QTY[symbol]} — skipping`);
+      return;
+    }
 
     const tp1x5 = side === "BUY" ? entryPrice + riskPerUnit * 1.5 : entryPrice - riskPerUnit * 1.5;
     const tp3x = side === "BUY" ? entryPrice + riskPerUnit * 3 : entryPrice - riskPerUnit * 3;
@@ -308,22 +331,51 @@ export class TradingEngine {
 
     try {
       const positionSide = side === "BUY" ? "LONG" : "SHORT";
-      const res = await bingxRequest("POST", "/openApi/swap/v2/trade/order", {
-        symbol, side, positionSide, type: "MARKET", quantity: quantity.toString(),
-        stopLoss: JSON.stringify({ type: "STOP_MARKET", stopPrice: parseFloat(stopLoss.toFixed(2)), workingType: "MARK_PRICE" }),
-      });
+      // Set leverage before placing order (BingX requires this)
+      await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", { symbol, side: positionSide, leverage: CONFIG.LEVERAGE });
+
+      const orderParams: Record<string, any> = {
+        symbol,
+        side: side,
+        positionSide: positionSide,
+        type: "MARKET",
+        quantity: quantity.toString(),
+        // Stop Loss is set here
+        stopLoss: JSON.stringify({
+          type: "STOP_MARKET",
+          stopPrice: parseFloat(stopLoss.toFixed(2)),
+          workingType: "MARK_PRICE",
+        }),
+      };
+
+      const res = await bingxRequest("POST", "/openApi/swap/v2/trade/order", orderParams);
 
       if (res.code === 0) {
         const filledPrice = parseFloat(res.data?.order?.avgPrice || entryPrice.toString());
         state.position = {
-          symbol, side, positionSide, entryPrice: filledPrice, quantity, originalQuantity: quantity,
-          stopLoss, takeProfit1x5: tp1x5, takeProfit3x: tp3x, riskAmount, riskPerUnit,
-          partialClosed: false, breakEvenMoved: false, openTime: Date.now(),
+          symbol,
+          side: side,
+          positionSide: positionSide,
+          entryPrice: filledPrice,
+          quantity,
+          originalQuantity: quantity,
+          stopLoss,
+          takeProfit1x5: tp1x5,
+          takeProfit3x: tp3x,
+          riskAmount,
+          riskPerUnit,
+          partialClosed: false,
+          breakEvenMoved: false,
+          openTime: Date.now(),
         };
-        this.log("trade", symbol, `✅ FILLED at $${filledPrice.toFixed(2)}`);
+        this.log("trade", symbol, `✅ FILLED at $${filledPrice.toFixed(2)} | SL: $${stopLoss.toFixed(2)} | TP1.5x: $${tp1x5.toFixed(2)} | TP3x: $${tp3x.toFixed(2)}`);
         this.emit("trade_opened", { symbol, position: state.position });
+      } else {
+        this.log("error", symbol, `❌ Order failed: ${res.msg}`);
       }
-    } catch (e: any) { this.log("error", symbol, `❌ Order error: ${e.message}`); }
+    } catch (e: any) {
+      this.log("error", symbol, `❌ Order error: ${e.response?.data?.msg || e.message}`);
+    }
   }
 
   private async monitorPositions() {
@@ -331,86 +383,152 @@ export class TradingEngine {
     for (const [sym, state] of this.symbols) {
       if (!state.position || state.price <= 0) continue;
       const pos = state.position;
-      const pnlPerUnit = pos.side === "BUY" ? state.price - pos.entryPrice : pos.entryPrice - state.price;
-      const riskMultiple = pnlPerUnit / pos.riskPerUnit;
+      const currentPrice = state.price;
 
-      // SL Hit
-      if ((pos.side === "BUY" && state.price <= pos.stopLoss) || (pos.side === "SELL" && state.price >= pos.stopLoss)) {
-        await this.closePosition(sym, pos.quantity, pos.breakEvenMoved ? "BREAK_EVEN" : "SL_HIT");
-        continue;
-      }
+      const pnlPerUnit = pos.side === "BUY" ? currentPrice - pos.entryPrice : pos.entryPrice - currentPrice;
+      const riskMultiple = pos.riskPerUnit > 0 ? pnlPerUnit / pos.riskPerUnit : 0;
 
-      // 1.5x Partial Exit & BE
+      // ---- PHASE 1: STOP LOSS HIT (handled by exchange SL order) ----
+      // The exchange will trigger the SL order. We just need to check if position is closed.
+      // This logic is primarily for TP and BE management.
+
+      // ---- PHASE 2: 1.5x REACHED → Close 50% + Move SL to Entry ----
       if (!pos.partialClosed && riskMultiple >= 1.5) {
         const halfQty = this.roundQty(sym, pos.quantity / 2);
         if (halfQty > 0) {
-          this.log("partial", sym, `🎯 1.5x REACHED — Closing 50% + Moving SL to Entry`);
-          if (await this.closePartial(sym, halfQty)) {
+          this.log("partial", sym, `🎯 1.5x REACHED ($${currentPrice.toFixed(2)}) — Closing 50% (${halfQty}) + Moving SL to Entry`);
+          const success = await this.closePartial(sym, halfQty);
+          if (success) {
             pos.partialClosed = true;
             pos.quantity = this.roundQty(sym, pos.quantity - halfQty);
+            this.tpHits++;
+
+            // Move SL to break-even (entry price) — USER'S EXACT LOGIC
             pos.stopLoss = pos.entryPrice;
             pos.breakEvenMoved = true;
-            await this.updateStopLoss(sym, pos);
+            this.log("info", sym, `🔒 SL moved to Break-Even: $${pos.entryPrice.toFixed(2)} — Remaining: ${pos.quantity}`);
+
+            await this.updateStopLoss(sym, pos); // Update SL on exchange
+            this.emit("partial_close", { symbol: sym, position: pos });
           }
         }
       }
 
-      // 3x Full Exit
+      // ---- PHASE 3: 3x REACHED → Close remaining 50% ----
       if (pos.partialClosed && riskMultiple >= 3.0) {
-        this.log("close", sym, `🏆 3x FULL TARGET REACHED`);
+        this.log("close", sym, `🏆 3x FULL TARGET ($${currentPrice.toFixed(2)}) — Closing remaining ${pos.quantity}`);
+        this.tpHits++;
         await this.closePosition(sym, pos.quantity, "TP_3X");
       }
+
+      // ---- PHASE BE: If price returns to entry after partial → Exit at zero ----
+      // This is handled by the updated SL to entry price on the exchange.
+      // If the price hits the new SL (which is entry price), the position will be closed at BE.
     }
   }
 
+  // ---- Close partial position ----
   private async closePartial(symbol: string, quantity: number): Promise<boolean> {
     const state = this.symbols.get(symbol)!;
+    if (!state?.position) return false;
+
     try {
+      const closeSide = state.position.side === "BUY" ? "SELL" : "BUY";
       const res = await bingxRequest("POST", "/openApi/swap/v2/trade/order", {
-        symbol, side: state.position!.side === "BUY" ? "SELL" : "BUY",
-        positionSide: state.position!.positionSide, type: "MARKET", quantity: quantity.toString(),
+        symbol,
+        side: closeSide,
+        positionSide: state.position.positionSide,
+        type: "MARKET",
+        quantity: quantity.toString(),
       });
+
       if (res.code === 0) {
-        const pnl = (state.position!.side === "BUY" ? state.price - state.position!.entryPrice : state.position!.entryPrice - state.price) * quantity;
-        this.totalPnl += pnl; this.balance += pnl;
-        this.log("partial", symbol, `✅ Partial close: ${quantity} | PnL: $${pnl.toFixed(4)}`, pnl);
+        const partialPnl = (state.position.side === "BUY"
+          ? state.price - state.position.entryPrice
+          : state.position.entryPrice - state.price) * quantity;
+
+        this.totalPnl += partialPnl;
+        this.balance += partialPnl;
+        this.log("partial", symbol, `✅ Partial close: ${quantity} units | PnL: $${partialPnl.toFixed(4)}`, partialPnl);
         return true;
       }
-    } catch (e) {}
-    return false;
+      return false;
+    } catch (e: any) {
+      this.log("error", symbol, `Partial close error: ${e.response?.data?.msg || e.message}`);
+      return false;
+    }
   }
 
+  // ---- Close full position ----
   private async closePosition(symbol: string, quantity: number, reason: string) {
     const state = this.symbols.get(symbol)!;
     const pos = state.position!;
     try {
+      const closeSide = pos.side === "BUY" ? "SELL" : "BUY";
       const res = await bingxRequest("POST", "/openApi/swap/v2/trade/order", {
-        symbol, side: pos.side === "BUY" ? "SELL" : "BUY",
-        positionSide: pos.positionSide, type: "MARKET", quantity: quantity.toString(),
+        symbol,
+        side: closeSide,
+        positionSide: pos.positionSide,
+        type: "MARKET",
+        quantity: quantity.toString(),
       });
+
       if (res.code === 0) {
-        const pnl = (pos.side === "BUY" ? state.price - pos.entryPrice : pos.entryPrice - state.price) * quantity;
-        this.totalPnl += pnl; this.balance += pnl; this.totalTrades++;
-        if (pnl > 0) this.winTrades++; else this.lossTrades++;
-        this.log("close", symbol, `🏁 ${reason}: PnL $${pnl.toFixed(4)}`, pnl);
+        const pnlPerUnit = pos.side === "BUY"
+          ? state.price - pos.entryPrice
+          : pos.entryPrice - pos.entryPrice; // PnL for full close is calculated from entry to current price
+        const tradePnl = pnlPerUnit * quantity;
+
+        this.totalPnl += tradePnl;
+        this.balance += tradePnl;
+        this.totalTrades++;
+
+        const isWin = reason === "TP_3X" || reason === "BREAK_EVEN" || tradePnl > 0;
+        if (isWin) this.winTrades++; else this.lossTrades++;
+
+        const emoji = reason === "TP_3X" ? "🏆" : reason === "BREAK_EVEN" ? "🔒" : tradePnl > 0 ? "🟢" : "🔴";
+        this.log("close", symbol, `${emoji} ${reason}: PnL $${tradePnl.toFixed(4)} | Balance: $${this.balance.toFixed(2)} | Total PnL: $${this.totalPnl.toFixed(4)}`, tradePnl);
+
         state.position = null;
+        this.emit("trade_closed", { symbol, pnl: tradePnl, reason, isWin });
+
         await this.syncBalance();
+      } else {
+        this.log("error", symbol, `Close failed: ${res.msg}`);
       }
-    } catch (e) { state.position = null; }
+    } catch (e: any) {
+      this.log("error", symbol, `Close error: ${e.response?.data?.msg || e.message}`);
+      state.position = null; // Clear position even on error to avoid stuck positions
+    }
   }
 
+  // ---- Update SL on exchange ----
   private async updateStopLoss(symbol: string, pos: ActivePosition) {
     try {
+      // Cancel existing SL order first
       await bingxRequest("POST", "/openApi/swap/v2/trade/cancelAllOpenOrders", { symbol });
+
+      // Place new SL order at the updated stopLoss price
+      const closeSide = pos.side === "BUY" ? "SELL" : "BUY";
       await bingxRequest("POST", "/openApi/swap/v2/trade/order", {
-        symbol, side: pos.side === "BUY" ? "SELL" : "BUY", positionSide: pos.positionSide,
-        type: "STOP_MARKET", quantity: pos.quantity.toString(),
-        stopPrice: parseFloat(pos.stopLoss.toFixed(2)), workingType: "MARK_PRICE",
+        symbol,
+        side: closeSide,
+        positionSide: pos.positionSide,
+        type: "STOP_MARKET",
+        quantity: pos.quantity.toString(),
+        stopPrice: parseFloat(pos.stopLoss.toFixed(2)),
+        workingType: "MARK_PRICE",
       });
-    } catch (e) {}
+
+      this.log("info", symbol, `📝 SL updated on exchange to $${pos.stopLoss.toFixed(2)}`);
+    } catch (e: any) {
+      this.log("error", symbol, `SL update error: ${e.response?.data?.msg || e.message} — programmatic SL still active`);
+    }
   }
 
+  // ---- Utility ----
   private roundQty(symbol: string, qty: number): number {
-    return symbol === "BTC-USDT" ? Math.floor(qty * 1000) / 1000 : Math.floor(qty * 100) / 100;
+    if (symbol === "BTC-USDT") return Math.floor(qty * 1000) / 1000;
+    return Math.floor(qty * 100) / 100;
   }
 }

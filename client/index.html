@@ -3,28 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sovereign X — العقل الرياضي ضد التاريخ</title>
+    <title>Sovereign X — العقل الرياضي الحي</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">
     <style>
-        :root { --accent: #10b981; --bg: #030408; --panel: #0a0b14; }
+        :root { --accent: #10b981; --bg: #020308; --panel: #0a0b14; --btc: #f7931a; --eth: #627eea; }
         body { font-family: 'Cairo', sans-serif; background: var(--bg); color: #f8fafc; min-height: 100vh; overflow-x: hidden; }
         .alpha-glass { background: var(--panel); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 2rem; }
         .master-glow { border: 1px solid var(--accent) !important; box-shadow: 0 0 60px rgba(16, 185, 129, 0.1); }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .btn-run { background: linear-gradient(135deg, #064e3b, #10b981); color: #000; font-weight: 900; transition: 0.3s; cursor: pointer; border: none; }
-        .btn-run:hover:not(:disabled) { transform: scale(1.01); box-shadow: 0 0 40px rgba(16, 185, 129, 0.4); }
+        .btn-run:hover:not(:disabled) { transform: scale(1.02); box-shadow: 0 0 40px rgba(16, 185, 129, 0.4); }
+        .btn-stop { background: linear-gradient(135deg, #991b1b, #ef4444); color: #fff; font-weight: 900; transition: 0.3s; cursor: pointer; border: none; }
+        .btn-stop:hover { transform: scale(1.01); box-shadow: 0 0 40px rgba(239, 68, 68, 0.5); }
         .status-badge { font-size: 10px; padding: 4px 12px; border-radius: 6px; font-weight: 900; border: 1px solid; }
-        .status-real { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-color: #3b82f6; }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
-        .win-border { border-right: 5px solid #10b981; background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.05)); }
-        .loss-border { border-right: 5px solid #ef4444; background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.05)); }
-        .be-border { border-right: 5px solid #3b82f6; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.05)); }
+        .status-live { background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: #10b981; }
+        .status-off { background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: 6px; }
+        .status-connected { background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
+        .status-disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .log-entry { animation: slideIn 0.15s ease-out; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-        .log-item { animation: slideIn 0.3s ease-out; }
+        .symbol-card { position: relative; overflow: hidden; }
+        .symbol-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+        .btc-card::before { background: linear-gradient(90deg, #f7931a, #fbbf24); }
+        .eth-card::before { background: linear-gradient(90deg, #627eea, #8b5cf6); }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
     </style>
 </head>
 <body class="p-4 md:p-10">
@@ -32,70 +40,155 @@
 
     <!-- Header -->
     <header class="alpha-glass p-10 flex flex-col lg:flex-row justify-between items-center gap-8 relative overflow-hidden master-glow">
-        <div class="absolute -right-20 -top-20 opacity-5 rotate-12"><i class="fa-solid fa-history text-[300px] text-emerald-500"></i></div>
+        <div class="absolute -right-20 -top-20 opacity-5 rotate-12"><i class="fa-solid fa-brain text-[300px] text-emerald-500"></i></div>
         <div class="flex items-center gap-8 z-10 text-right">
             <div class="w-24 h-24 rounded-[2.2rem] bg-emerald-500 flex items-center justify-center shadow-2xl">
-                <i class="fa-solid fa-brain text-black text-5xl"></i>
+                <i class="fa-solid fa-robot text-black text-5xl"></i>
             </div>
             <div>
                 <div class="flex items-center gap-3">
-                    <h1 class="text-4xl font-black tracking-tighter uppercase italic leading-none">REAL <span class="text-emerald-400">CONTEXT</span></h1>
-                    <span class="status-badge status-real">Historical Stress Test</span>
+                    <h1 class="text-4xl font-black tracking-tighter uppercase italic leading-none">SOVEREIGN <span class="text-emerald-400">X</span></h1>
+                    <span id="engine-status" class="status-badge status-off">OFFLINE</span>
+                    <span id="ws-status" class="status-dot status-disconnected" title="WebSocket"></span>
                 </div>
-                <p class="text-[11px] text-zinc-500 uppercase tracking-[0.4em] font-black mt-2 italic text-white">العقل العشوائي ضد أسوأ فترات السوق (آخر 60 يوم) | مخاطرة ثابتة 5%</p>
+                <p class="text-[11px] text-zinc-500 uppercase tracking-[0.4em] font-black mt-2 italic text-white">العقل الرياضي الحي: 5% مخاطرة | 1.5x/3.0x بروتوكول الخروج</p>
             </div>
         </div>
-        <div class="text-center z-10 bg-black/50 p-6 rounded-3xl border border-white/5 min-w-[220px]">
-            <span class="text-[10px] text-zinc-600 block uppercase font-black mb-1">الرصيد في قلب العاصفة</span>
-            <span id="balance-display" class="mono text-5xl font-black text-white italic tracking-tighter">$100.00</span>
+        <div class="flex gap-8 items-center z-10">
+            <div class="text-center">
+                <span class="text-[10px] text-zinc-600 block uppercase font-black mb-1">الرصيد الحي</span>
+                <span id="balance-display" class="mono text-5xl font-black text-white italic tracking-tighter">$0.00</span>
+            </div>
+            <div class="alpha-glass p-6 text-center min-w-[140px]">
+                <span class="text-[9px] text-zinc-500 block uppercase font-black mb-1">صافي الربح</span>
+                <span id="total-pnl" class="text-2xl font-black text-emerald-500 mono">$0.00</span>
+            </div>
         </div>
     </header>
 
-    <!-- Controls -->
-    <button id="runBtn" onclick="runHistoricalSim()" class="btn-run w-full py-10 rounded-3xl text-3xl font-black uppercase flex items-center justify-center gap-8 shadow-2xl">
-        <i class="fa-solid fa-cloud-bolt"></i> إطلاق المحاكاة في "أسوأ فترات السوق"
-    </button>
+    <!-- Control Buttons -->
+    <div class="grid grid-cols-2 gap-4">
+        <button id="startBtn" onclick="startEngine()" class="btn-run py-10 rounded-3xl text-2xl font-black uppercase flex items-center justify-center gap-6 shadow-2xl">
+            <i class="fa-solid fa-play"></i> تشغيل المحرك
+        </button>
+        <button id="stopBtn" onclick="stopEngine()" class="btn-stop py-10 rounded-3xl text-2xl font-black uppercase flex items-center justify-center gap-6 shadow-2xl">
+            <i class="fa-solid fa-stop"></i> إيقاف المحرك
+        </button>
+    </div>
 
-    <!-- Detailed Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <!-- Stats Row -->
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
         <div class="alpha-glass p-8 text-center border-b-4 border-b-emerald-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">صافي الربح</span>
-            <div id="m-pnl" class="mono text-4xl font-black text-emerald-400">$0.00</div>
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">الصفقات</span>
+            <div id="stat-trades" class="mono text-4xl font-black text-white">0</div>
         </div>
-        <div class="alpha-glass p-8 text-center border-b-4 border-b-blue-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">نسبة النجاح</span>
-            <div id="m-winrate" class="mono text-4xl font-black text-blue-400">0%</div>
-        </div>
-        <div class="alpha-glass p-8 text-center border-b-4 border-b-purple-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">أقصى تراجع (DD)</span>
-            <div id="m-dd" class="mono text-4xl font-black text-purple-400">0%</div>
+        <div class="alpha-glass p-8 text-center border-b-4 border-b-green-500">
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">الرابحة</span>
+            <div id="stat-wins" class="mono text-4xl font-black text-green-400">0</div>
         </div>
         <div class="alpha-glass p-8 text-center border-b-4 border-b-red-500">
-            <span class="text-[10px] text-zinc-600 block uppercase font-black mb-2 italic">العمليات</span>
-            <div id="m-trades" class="mono text-4xl font-black text-red-500">0</div>
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">الخاسرة</span>
+            <div id="stat-losses" class="mono text-4xl font-black text-red-400">0</div>
+        </div>
+        <div class="alpha-glass p-8 text-center border-b-4 border-b-blue-500">
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">TP Hits</span>
+            <div id="stat-tp" class="mono text-4xl font-black text-blue-400">0</div>
+        </div>
+        <div class="alpha-glass p-8 text-center border-b-4 border-b-purple-500">
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">الرافعة</span>
+            <div id="lev-display" class="mono text-4xl font-black text-purple-400">10x</div>
+        </div>
+        <div class="alpha-glass p-8 text-center border-b-4 border-b-cyan-500">
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">W / L Ratio</span>
+            <div id="stat-wr" class="mono text-4xl font-black text-cyan-400">—</div>
         </div>
     </div>
 
-    <!-- Arena -->
+    <!-- Dual Symbol Cards + Chart -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div class="lg:col-span-2 alpha-glass p-10 h-[550px] flex flex-col">
-            <div class="flex justify-between items-center mb-8">
-                <h3 class="text-xs font-black uppercase text-zinc-500 tracking-widest italic text-white italic">Mathematical Mind vs Market Chaos</h3>
-                <div class="flex gap-4 mono text-[10px]">
-                    <span id="price-sync" class="text-orange-400 italic">Syncing Historical Period...</span>
+        <!-- BTC + ETH Cards -->
+        <div class="space-y-4">
+            <!-- BTC Card -->
+            <div class="alpha-glass symbol-card btc-card p-6">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-600 flex items-center justify-center">
+                            <i class="fa-brands fa-bitcoin text-black text-2xl"></i>
+                        </div>
+                        <div>
+                            <div class="font-black text-lg">BTC-USDT</div>
+                            <div id="btc-klines" class="text-[8px] text-zinc-500 mono">0 klines</div>
+                        </div>
+                    </div>
+                    <div id="btc-price" class="mono text-2xl font-black text-orange-400">$—</div>
+                </div>
+                <div id="btc-position" class="hidden p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                    <div class="flex justify-between items-center mb-2">
+                        <span id="btc-pos-side" class="text-xs font-black uppercase"></span>
+                        <span id="btc-pos-qty" class="mono text-[10px] text-zinc-400"></span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[9px] text-zinc-400">
+                        <div>دخول: <span id="btc-pos-entry" class="text-white mono font-bold">—</span></div>
+                        <div>SL: <span id="btc-pos-sl" class="text-red-400 mono font-bold">—</span></div>
+                        <div>TP 1.5x: <span id="btc-pos-tp1" class="text-yellow-400 mono font-bold">—</span></div>
+                        <div>TP 3x: <span id="btc-pos-tp3" class="text-emerald-400 mono font-bold">—</span></div>
+                    </div>
+                    <div id="btc-pos-partial" class="text-[8px] text-yellow-400 mt-2 hidden font-bold">⚡ تم إغلاق 50% — SL عند Break-Even</div>
+                </div>
+                <div id="btc-no-pos" class="p-2 text-center text-zinc-700 text-[10px] font-bold uppercase tracking-widest">
+                    <i class="fa-solid fa-satellite-dish opacity-20"></i> يراقب السيولة...
                 </div>
             </div>
+
+            <!-- ETH Card -->
+            <div class="alpha-glass symbol-card eth-card p-6">
+                <div class="flex justify-between items-center mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+                            <i class="fa-brands fa-ethereum text-white text-2xl"></i>
+                        </div>
+                        <div>
+                            <div class="font-black text-lg">ETH-USDT</div>
+                            <div id="eth-klines" class="text-[8px] text-zinc-500 mono">0 klines</div>
+                        </div>
+                    </div>
+                    <div id="eth-price" class="mono text-2xl font-black text-indigo-400">$—</div>
+                </div>
+                <div id="eth-position" class="hidden p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
+                    <div class="flex justify-between items-center mb-2">
+                        <span id="eth-pos-side" class="text-xs font-black uppercase"></span>
+                        <span id="eth-pos-qty" class="mono text-[10px] text-zinc-400"></span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-[9px] text-zinc-400">
+                        <div>دخول: <span id="eth-pos-entry" class="text-white mono font-bold">—</span></div>
+                        <div>SL: <span id="eth-pos-sl" class="text-red-400 mono font-bold">—</span></div>
+                        <div>TP 1.5x: <span id="eth-pos-tp1" class="text-yellow-400 mono font-bold">—</span></div>
+                        <div>TP 3x: <span id="eth-pos-tp3" class="text-emerald-400 mono font-bold">—</span></div>
+                    </div>
+                    <div id="eth-pos-partial" class="text-[8px] text-yellow-400 mt-2 hidden font-bold">⚡ تم إغلاق 50% — SL عند Break-Even</div>
+                </div>
+                <div id="eth-no-pos" class="p-2 text-center text-zinc-700 text-[10px] font-bold uppercase tracking-widest">
+                    <i class="fa-solid fa-satellite-dish opacity-20"></i> يراقب السيولة...
+                </div>
+            </div>
+        </div>
+
+        <!-- Equity Chart -->
+        <div class="lg:col-span-2 alpha-glass p-10 h-[500px] flex flex-col">
+            <h3 class="text-xs font-black uppercase text-zinc-500 tracking-widest italic mb-6">Equity Curve — Live Performance</h3>
             <div class="flex-1 relative">
                 <canvas id="mainChart"></canvas>
             </div>
         </div>
-        <div class="alpha-glass p-10 flex flex-col h-[550px]">
-            <h3 class="text-xs font-black text-zinc-500 mb-8 tracking-widest italic text-white uppercase italic">Execution Log (Pure Logic)</h3>
-            <div id="logBody" class="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar text-[11px]">
-                <div class="h-full flex flex-col items-center justify-center opacity-10 text-center px-10">
-                    <i class="fa-solid fa-tornado text-6xl mb-6"></i>
-                    <p class="font-bold uppercase tracking-widest italic text-white">بانتظار مواجهة التاريخ...</p>
-                </div>
+    </div>
+
+    <!-- Execution Log -->
+    <div class="alpha-glass p-10">
+        <h3 class="text-xs font-black text-zinc-500 mb-6 tracking-widest italic uppercase">Audit Execution Log — Live Server Events</h3>
+        <div id="logBody" class="max-h-[400px] overflow-y-auto space-y-3 pr-2">
+            <div class="h-32 flex flex-col items-center justify-center opacity-10 text-center">
+                <i class="fa-solid fa-fingerprint text-5xl mb-4"></i>
+                <p class="font-bold uppercase tracking-widest italic">بانتظار اتصال المحرك...</p>
             </div>
         </div>
     </div>
@@ -104,128 +197,231 @@
 
 <script>
 /**
- * Sovereign X — The Historical Random Mind
- * ينفذ "العقل العشوائي" داخل "سياق تاريخي" (أسوأ الفترات).
+ * Sovereign X — Live Dashboard
+ * Connects to server-side Trading Engine via WebSocket
+ * Displays real-time trades, positions, and equity curve
  */
 
-let chart = null, isRunning = false;
-let balance = 100, capital = 100, equityPoints = [100];
-let stats = { win: 0, loss: 0, be: 0, total: 0, peak: 100, maxDD: 0 };
+let chart = null;
+let ws = null;
+let equityPoints = [];
+let reconnectTimer = null;
 
-const Logic = {
-    fixedRisk: 0.05, 
-    fee: 0.001,
-    // احتمالات العقل الرياضي (حقيقية وتخسر أيضاً)
-    probWin: 0.40,    // 40% نجاح كامل
-    probPartial: 0.20 // 20% حجز نصف وتأمين دخول
-    // الباقي (40%) خسارة كاملة (تعمدنا زيادة الخسارة لمحاكاة السوق السيء)
-};
+// ============================================================================
+// WebSocket Connection to Server Engine
+// ============================================================================
 
-async function fetchHistoricalContext() {
+function connectWS() {
+    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${protocol}//${location.host}`;
+    
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = () => {
+        document.getElementById('ws-status').className = 'status-dot status-connected';
+        addLog('SYSTEM', 'info', '🔌 متصل بالمحرك — يعرض البيانات الحية');
+        fetchStats();
+    };
+    
+    ws.onmessage = (e) => {
+        try {
+            const msg = JSON.parse(e.data);
+            handleEvent(msg.event, msg.data);
+        } catch(err) {}
+    };
+    
+    ws.onclose = () => {
+        document.getElementById('ws-status').className = 'status-dot status-disconnected';
+        if (reconnectTimer) clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectWS, 3000);
+    };
+    
+    ws.onerror = () => ws.close();
+}
+
+function handleEvent(event, data) {
+    switch(event) {
+        case 'stats':
+            updateDashboard(data);
+            break;
+        case 'price':
+            updatePrice(data.symbol, data.price);
+            break;
+        case 'log':
+            addLog(data.symbol, data.type, data.message, data.pnl);
+            break;
+        case 'trade_opened':
+        case 'trade_closed':
+        case 'partial_close':
+            fetchStats();
+            break;
+        case 'started':
+            document.getElementById('engine-status').textContent = 'LIVE';
+            document.getElementById('engine-status').className = 'status-badge status-live';
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-play"></i> المحرك يعمل';
+            document.getElementById('stopBtn').disabled = false;
+            break;
+        case 'stopped':
+            document.getElementById('engine-status').textContent = 'OFFLINE';
+            document.getElementById('engine-status').className = 'status-badge status-off';
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-play"></i> تشغيل المحرك';
+            document.getElementById('stopBtn').disabled = true;
+            break;
+    }
+}
+
+// ============================================================================
+// API Calls
+// ============================================================================
+
+async function fetchStats() {
     try {
-        const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1500');
-        const d = await r.json();
-        return d; // بيانات 1500 ساعة (أكثر من شهرين)
-    } catch(e) { return null; }
+        const res = await fetch('/api/stats');
+        const json = await res.json();
+        if (json.success) updateDashboard(json.data);
+    } catch(e) {}
 }
 
-async function runHistoricalSim() {
-    if(isRunning) return;
-    isRunning = true;
-    const btn = document.getElementById('runBtn');
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري تحليل أسوأ فترات السوق...`;
-    
-    const marketData = await fetchHistoricalContext();
-    if(!marketData) {
-        alert("فشل جلب البيانات التاريخية.");
-        isRunning = false; btn.disabled = false; return;
-    }
-
-    // تهيئة
-    balance = 100; equityPoints = [100];
-    stats = { win: 0, loss: 0, be: 0, total: 0, peak: 100, maxDD: 0 };
-    document.getElementById('logBody').innerHTML = '';
-    initChart();
-
-    document.getElementById('price-sync').textContent = "Period: Last 60 Days Stress Test";
-
-    let i = 0;
-    const loop = setInterval(() => {
-        if (i >= 100 || balance <= 1) {
-            clearInterval(loop);
-            isRunning = false; btn.disabled = false;
-            btn.innerHTML = `<i class="fa-solid fa-play"></i> إعادة إطلاق المحاكاة التاريخية`;
-            return;
-        }
-
-        executeProbabilisticTrade(i);
-        updateUI();
-        updateChart();
-        i++;
-    }, 80);
+async function startEngine() {
+    document.getElementById('startBtn').disabled = true;
+    document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التشغيل...';
+    try {
+        await fetch('/api/engine/start', { method: 'POST' });
+        setTimeout(fetchStats, 2000);
+    } catch(e) {}
+    setTimeout(() => {
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-play"></i> تشغيل المحرك';
+    }, 3000);
 }
 
-function executeProbabilisticTrade(index) {
-    const riskAmt = balance * Logic.fixedRisk;
-    const feeAmt = (riskAmt * 10) * Logic.fee;
-    
-    const rand = Math.random();
-    let pnl = 0, label = "", styleClass = "";
+async function stopEngine() {
+    try {
+        await fetch('/api/engine/stop', { method: 'POST' });
+        setTimeout(fetchStats, 1000);
+    } catch(e) {}
+}
 
-    // تنفيذ العقل العشوائي (الذي يربح ويخسر كما طلبت)
-    if (rand < Logic.probWin) {
-        pnl = (riskAmt * 0.5 * 1.5) + (riskAmt * 0.5 * 3.0) - feeAmt;
-        label = "FULL TARGET HIT (3.0x)";
-        styleClass = "win-border";
-        stats.win++;
-    } else if (rand < (Logic.probWin + Logic.probPartial)) {
-        pnl = (riskAmt * 0.5 * 1.5) - feeAmt;
-        label = "PARTIAL HIT & BE (1.5x)";
-        styleClass = "be-border";
-        stats.be++;
+// ============================================================================
+// Dashboard Update
+// ============================================================================
+
+function updateDashboard(data) {
+    document.getElementById('balance-display').textContent = `$${data.balance.toFixed(2)}`;
+    document.getElementById('total-pnl').textContent = `$${data.totalPnl.toFixed(2)}`;
+    document.getElementById('total-pnl').className = `text-2xl font-black mono ${data.totalPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`;
+
+    document.getElementById('stat-trades').textContent = data.totalTrades;
+    document.getElementById('stat-wins').textContent = data.winTrades;
+    document.getElementById('stat-losses').textContent = data.lossTrades;
+    document.getElementById('stat-tp').textContent = data.tpHits;
+    document.getElementById('lev-display').textContent = `${data.leverage}x`;
+
+    const winRate = data.totalTrades > 0 ? ((data.winTrades / data.totalTrades) * 100).toFixed(1) : '—';
+    document.getElementById('stat-wr').textContent = `${winRate}%`;
+
+    if (data.isRunning) {
+        document.getElementById('engine-status').textContent = 'LIVE';
+        document.getElementById('engine-status').className = 'status-badge status-live';
+        document.getElementById('startBtn').disabled = true;
+        document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-play"></i> المحرك يعمل';
+        document.getElementById('stopBtn').disabled = false;
     } else {
-        pnl = -riskAmt - feeAmt;
-        label = "STOP LOSS TRIGGERED";
-        styleClass = "loss-border";
-        stats.loss++;
+        document.getElementById('engine-status').textContent = 'OFFLINE';
+        document.getElementById('engine-status').className = 'status-badge status-off';
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-play"></i> تشغيل المحرك';
+        document.getElementById('stopBtn').disabled = true;
     }
 
-    balance += pnl;
-    equityPoints.push(balance);
-    stats.total++;
-    
-    if (balance > stats.peak) stats.peak = balance;
-    stats.maxDD = Math.max(stats.maxDD, ((stats.peak - balance) / stats.peak) * 100);
+    // Update Equity Chart
+    if (data.logs) {
+        equityPoints = [];
+        let currentBalance = data.startBalance;
+        equityPoints.push(currentBalance);
+        for (const log of data.logs) {
+            if (log.pnl !== undefined) {
+                currentBalance += log.pnl;
+                equityPoints.push(currentBalance);
+            }
+        }
+        updateChart();
+    }
 
-    addLog(index + 1, pnl, label, styleClass);
+    // Update Symbol Cards
+    for (const sym of CONFIG.SYMBOLS) {
+        const symbolData = data.symbols[sym];
+        if (symbolData) {
+            document.getElementById(`${sym.toLowerCase().replace('-', '')}-price`).textContent = `$${symbolData.price.toFixed(2)}`;
+            document.getElementById(`${sym.toLowerCase().replace('-', '')}-klines`).textContent = `${symbolData.klineCount} klines`;
+
+            if (symbolData.hasPosition && symbolData.position) {
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-position`).classList.remove('hidden');
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-no-pos`).classList.add('hidden');
+
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-side`).textContent = symbolData.position.side;
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-qty`).textContent = `${symbolData.position.quantity.toFixed(3)} units`;
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-entry`).textContent = `$${symbolData.position.entryPrice.toFixed(2)}`;
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-sl`).textContent = `$${symbolData.position.stopLoss.toFixed(2)}`;
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-tp1`).textContent = `$${symbolData.position.takeProfit1x5.toFixed(2)}`;
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-tp3`).textContent = `$${symbolData.position.takeProfit3x.toFixed(2)}`;
+
+                if (symbolData.position.partialClosed) {
+                    document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-partial`).classList.remove('hidden');
+                } else {
+                    document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-partial`).classList.add('hidden');
+                }
+
+            } else {
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-position`).classList.add('hidden');
+                document.getElementById(`${sym.toLowerCase().replace('-', '')}-no-pos`).classList.remove('hidden');
+            }
+        }
+    }
+
+    // Update Log
+    const logBody = document.getElementById('logBody');
+    logBody.innerHTML = ''; // Clear existing logs
+    if (data.logs && data.logs.length > 0) {
+        for (let i = data.logs.length - 1; i >= 0; i--) { // Display in reverse order (newest first)
+            const log = data.logs[i];
+            const div = document.createElement('div');
+            let styleClass = '';
+            let emoji = '';
+            switch (log.type) {
+                case 'info': emoji = 'ℹ️'; break;
+                case 'signal': emoji = '📡'; break;
+                case 'trade': emoji = '📈'; break;
+                case 'close':
+                    if (log.pnl !== undefined) {
+                        if (log.pnl > 0) { emoji = '✅'; styleClass = 'text-emerald-400'; } else { emoji = '❌'; styleClass = 'text-red-500'; }
+                    }
+                    break;
+                case 'partial': emoji = '⚡'; styleClass = 'text-yellow-400'; break;
+                case 'error': emoji = '🚨'; styleClass = 'text-red-500'; break;
+            }
+            div.className = `log-entry text-zinc-400 text-[10px] mono`;
+            div.innerHTML = `
+                <span class="${styleClass}">${emoji} [${new Date(log.time).toLocaleTimeString()}] [${log.symbol}] ${log.message}</span>
+                ${log.pnl !== undefined ? `<span class="${log.pnl >= 0 ? 'text-emerald-400' : 'text-red-500'}"> PnL: ${log.pnl.toFixed(4)}</span>` : ''}
+            `;
+            logBody.appendChild(div);
+        }
+    } else {
+        logBody.innerHTML = `
+            <div class="h-32 flex flex-col items-center justify-center opacity-10 text-center">
+                <i class="fa-solid fa-fingerprint text-5xl mb-4"></i>
+                <p class="font-bold uppercase tracking-widest italic">بانتظار اتصال المحرك...</p>
+            </div>
+        `;
+    }
 }
 
-function addLog(tradeNum, pnl, label, style) {
-    const log = document.getElementById('logBody');
-    const div = document.createElement('div');
-    div.className = `p-4 rounded-2xl ${style} font-bold italic log-item`;
-    div.innerHTML = `
-        <div class="flex justify-between items-center uppercase text-[10px]">
-            <span>Trade #${tradeNum} - ${label}</span>
-            <span class="${pnl >= 0 ? 'text-emerald-400' : 'text-red-500'} mono">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}$</span>
-        </div>
-        <p class="text-[7px] text-zinc-600 mt-1 uppercase italic tracking-widest">
-            Fixed Risk: 5.0% | Probabilistic Mind Decision
-        </p>
-    `;
-    log.prepend(div);
-}
-
-function updateUI() {
-    document.getElementById('balance-display').textContent = `$${balance.toFixed(2)}`;
-    const pnl = balance - capital;
-    document.getElementById('m-pnl').textContent = `$${pnl.toFixed(2)}`;
-    document.getElementById('m-pnl').className = `mono text-4xl font-black italic ${pnl >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
-    const wr = ((stats.win + stats.be) / stats.total * 100).toFixed(1);
-    document.getElementById('m-winrate').textContent = `${wr}%`;
-    document.getElementById('m-dd').textContent = `${stats.maxDD.toFixed(1)}%`;
-    document.getElementById('m-trades').textContent = stats.total;
+function updatePrice(symbol, price) {
+    const priceElement = document.getElementById(`${symbol.toLowerCase().replace('-', '')}-price`);
+    if (priceElement) priceElement.textContent = `$${price.toFixed(2)}`;
 }
 
 function initChart() {
@@ -233,7 +429,7 @@ function initChart() {
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
         type: 'line',
-        data: { labels: [0], datasets: [{ data: [100], borderColor: '#10b981', borderWidth: 3, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.4 }] },
+        data: { labels: [], datasets: [{ data: [], borderColor: '#10b981', borderWidth: 3, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.4 }] },
         options: { 
             responsive: true, maintainAspectRatio: false, 
             scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.02)' }, ticks: { color: '#555' } } }, 
@@ -248,7 +444,11 @@ function updateChart() {
     chart.update('none');
 }
 
-window.onload = initChart;
+window.onload = () => {
+    initChart();
+    connectWS();
+    fetchStats(); // Fetch initial stats on load
+};
 </script>
 </body>
 </html>
