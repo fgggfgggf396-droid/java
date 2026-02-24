@@ -156,6 +156,7 @@ export class TradingEngine {
   private tpHits = 0;
   private logs: LogEntry[] = [];
   private eventCallbacks: EventCallback[] = [];
+  private priceInterval: any = null;
 
   constructor() {
     for (const sym of CONFIG.SYMBOLS) {
@@ -190,9 +191,22 @@ export class TradingEngine {
     this.log("info", "SYSTEM", `💰 Balance: $${this.balance.toFixed(2)}`);
     for (const sym of CONFIG.SYMBOLS) await this.setMarginMode(sym, CONFIG.MARGIN_MODE as "CROSSED");
     await this.setLeverageAll(CONFIG.LEVERAGE);
+
+    // Fetch initial prices and klines via REST before WebSocket connects
+    for (const sym of CONFIG.SYMBOLS) {
+      await this.fetchInitialPrice(sym);
+      await this.fetchInitialKlines(sym);
+    }
+
     this.connectWS();
-    this.monitorInterval = setInterval(() => this.monitorPositions(), 500); // Monitor positions every 500ms
-    this.signalInterval = setInterval(() => this.generateProbabilisticSignals(), 5000); // Generate signals every 5 seconds
+
+    // Price polling fallback every 5s (in case WebSocket fails)
+    this.priceInterval = setInterval(async () => {
+      for (const sym of CONFIG.SYMBOLS) await this.fetchInitialPrice(sym);
+    }, 5000);
+
+    this.monitorInterval = setInterval(() => this.monitorPositions(), 500);
+    this.signalInterval = setInterval(() => this.generateProbabilisticSignals(), 5000);
     this.log("info", "SYSTEM", `✅ Engine running LIVE | Pure Probabilistic Mind Active`);
     this.emit("started", this.getStats());
   }
@@ -204,6 +218,7 @@ export class TradingEngine {
     if (this.monitorInterval) clearInterval(this.monitorInterval);
     if (this.signalInterval) clearInterval(this.signalInterval);
     if (this.pingInterval) clearInterval(this.pingInterval);
+    if (this.priceInterval) clearInterval(this.priceInterval);
     if (this.wsReconnectTimer) clearTimeout(this.wsReconnectTimer);
     if (this.ws) { try { this.ws.close(); } catch (e) {} this.ws = null; }
     this.emit("stopped", this.getStats());
@@ -223,6 +238,43 @@ export class TradingEngine {
 
   getKlines(symbol: string): Kline[] {
     return this.symbols.get(symbol)?.klines ?? [];
+  }
+
+  private async fetchInitialPrice(symbol: string) {
+    try {
+      const res = await bingxRequest("GET", "/openApi/swap/v2/quote/price", { symbol });
+      if (res.code === 0 && res.data?.price) {
+        const state = this.symbols.get(symbol)!;
+        state.price = parseFloat(res.data.price);
+        this.emit("price", { symbol, price: state.price });
+      }
+    } catch (e: any) {
+      this.log("error", symbol, `Price fetch failed: ${e.message}`);
+    }
+  }
+
+  private async fetchInitialKlines(symbol: string) {
+    try {
+      const res = await bingxRequest("GET", "/openApi/swap/v2/quote/klines", {
+        symbol,
+        interval: "1m",
+        limit: 60,
+      });
+      if (res.code === 0 && Array.isArray(res.data)) {
+        const state = this.symbols.get(symbol)!;
+        state.klines = res.data.map((k: any) => ({
+          t: k.time,
+          o: parseFloat(k.open),
+          h: parseFloat(k.high),
+          l: parseFloat(k.low),
+          c: parseFloat(k.close),
+          v: parseFloat(k.volume),
+        }));
+        this.log("info", symbol, `📊 Loaded ${state.klines.length} historical klines`);
+      }
+    } catch (e: any) {
+      this.log("error", symbol, `Klines fetch failed: ${e.message}`);
+    }
   }
 
   private async syncBalance() {
