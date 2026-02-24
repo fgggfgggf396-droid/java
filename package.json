@@ -5,7 +5,12 @@
   "license": "MIT",
   "scripts": {
     "build": "npx esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "pm2:start": "npm run build && mkdir -p logs && pm2 start ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop sovereign-x",
+    "pm2:restart": "npm run build && pm2 restart sovereign-x",
+    "pm2:logs": "pm2 logs sovereign-x",
+    "pm2:status": "pm2 status"
   },
   "dependencies": {
     "axios": "^1.12.0",

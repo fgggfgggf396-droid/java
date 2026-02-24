@@ -217,6 +217,14 @@ export class TradingEngine {
     return { totalTrades: this.totalTrades, winTrades: this.winTrades, lossTrades: this.lossTrades, totalPnl: this.totalPnl, balance: this.balance, startBalance: this.startBalance, leverage: this.leverage, isRunning: this.isRunning, symbols: symbolStats, logs: this.logs.slice(-100), tpHits: this.tpHits };
   }
 
+  getPrice(symbol: string): number {
+    return this.symbols.get(symbol)?.price ?? 0;
+  }
+
+  getKlines(symbol: string): Kline[] {
+    return this.symbols.get(symbol)?.klines ?? [];
+  }
+
   private async syncBalance() {
     try {
       const res = await bingxRequest("GET", "/openApi/swap/v3/user/balance");
@@ -229,7 +237,7 @@ export class TradingEngine {
   }
 
   private async setMarginMode(symbol: string, mode: "CROSSED" | "ISOLATED") {
-    try { await bingxRequest("POST", "/openApi/swap/v2/trade/marginType", { symbol, marginType: mode }); } catch (e) { this.log("info", symbol, `Margin mode already ${mode} or error: ${e.message}`); }
+    try { await bingxRequest("POST", "/openApi/swap/v2/trade/marginType", { symbol, marginType: mode }); } catch (e) { this.log("info", symbol, `Margin mode already ${mode} or error: ${(e as any).message}`); }
   }
 
   private async setLeverageAll(lev: number) {
@@ -239,7 +247,7 @@ export class TradingEngine {
         await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", { symbol: sym, side: "LONG", leverage: lev });
         await bingxRequest("POST", "/openApi/swap/v2/trade/leverage", { symbol: sym, side: "SHORT", leverage: lev });
         this.log("info", sym, `Leverage set to ${lev}x`);
-      } catch (e) { this.log("info", sym, `Leverage already ${lev}x or error: ${e.message}`); }
+      } catch (e) { this.log("info", sym, `Leverage already ${lev}x or error: ${(e as any).message}`); }
     }
   }
 
@@ -476,7 +484,7 @@ export class TradingEngine {
       if (res.code === 0) {
         const pnlPerUnit = pos.side === "BUY"
           ? state.price - pos.entryPrice
-          : pos.entryPrice - pos.entryPrice; // PnL for full close is calculated from entry to current price
+          : pos.entryPrice - state.price;
         const tradePnl = pnlPerUnit * quantity;
 
         this.totalPnl += tradePnl;

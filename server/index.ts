@@ -106,9 +106,9 @@ async function startServer() {
   app.get("/api/positions", (_req, res) => {
     const stats = engine.getStats();
     const positions: any[] = [];
-    for (const [sym, data] of Object.entries(stats.symbols)) {
+    for (const [, data] of Object.entries(stats.symbols)) {
       if (data.position) {
-        positions.push({ symbol: sym, ...data.position });
+        positions.push(data.position);
       }
     }
     res.json({ success: true, positions });
