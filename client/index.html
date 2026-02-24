@@ -3,36 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Institutional Guard v3.0 — The Third Proposal</title>
+    <title>Sovereign X — العقل الرياضي ضد التاريخ</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">
     <style>
-        :root { --accent: #10b981; --bg: #020308; --panel: #0a0b14; --btc: #f7931a; --eth: #627eea; }
+        :root { --accent: #10b981; --bg: #030408; --panel: #0a0b14; }
         body { font-family: 'Cairo', sans-serif; background: var(--bg); color: #f8fafc; min-height: 100vh; overflow-x: hidden; }
         .alpha-glass { background: var(--panel); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 2rem; }
         .master-glow { border: 1px solid var(--accent) !important; box-shadow: 0 0 60px rgba(16, 185, 129, 0.1); }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .btn-run { background: linear-gradient(135deg, #064e3b, #10b981); color: #000; font-weight: 900; transition: 0.3s; cursor: pointer; border: none; }
-        .btn-run:hover:not(:disabled) { transform: scale(1.02); box-shadow: 0 0 40px rgba(16, 185, 129, 0.4); }
-        .btn-stop { background: linear-gradient(135deg, #991b1b, #ef4444); color: #fff; font-weight: 900; transition: 0.3s; cursor: pointer; border: none; }
-        .btn-stop:hover { transform: scale(1.01); box-shadow: 0 0 40px rgba(239, 68, 68, 0.5); }
+        .btn-run:hover:not(:disabled) { transform: scale(1.01); box-shadow: 0 0 40px rgba(16, 185, 129, 0.4); }
         .status-badge { font-size: 10px; padding: 4px 12px; border-radius: 6px; font-weight: 900; border: 1px solid; }
-        .status-live { background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: #10b981; }
-        .status-off { background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: #ef4444; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: 6px; }
-        .status-connected { background: #10b981; box-shadow: 0 0 8px #10b981; animation: pulse 2s infinite; }
-        .status-disconnected { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .log-entry { animation: slideIn 0.15s ease-out; }
-        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-        .symbol-card { position: relative; overflow: hidden; }
-        .symbol-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
-        .btc-card::before { background: linear-gradient(90deg, #f7931a, #fbbf24); }
-        .eth-card::before { background: linear-gradient(90deg, #627eea, #8b5cf6); }
-        ::-webkit-scrollbar { width: 4px; }
+        .status-real { background: rgba(59, 130, 246, 0.1); color: #3b82f6; border-color: #3b82f6; }
+        ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+        .win-border { border-right: 5px solid #10b981; background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.05)); }
+        .loss-border { border-right: 5px solid #ef4444; background: linear-gradient(90deg, transparent, rgba(239, 68, 68, 0.05)); }
+        .be-border { border-right: 5px solid #3b82f6; background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.05)); }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+        .log-item { animation: slideIn 0.3s ease-out; }
     </style>
 </head>
 <body class="p-4 md:p-10">
@@ -40,159 +32,70 @@
 
     <!-- Header -->
     <header class="alpha-glass p-10 flex flex-col lg:flex-row justify-between items-center gap-8 relative overflow-hidden master-glow">
-        <div class="absolute -right-20 -top-20 opacity-5 rotate-12"><i class="fa-solid fa-vault text-[300px] text-emerald-500"></i></div>
+        <div class="absolute -right-20 -top-20 opacity-5 rotate-12"><i class="fa-solid fa-history text-[300px] text-emerald-500"></i></div>
         <div class="flex items-center gap-8 z-10 text-right">
             <div class="w-24 h-24 rounded-[2.2rem] bg-emerald-500 flex items-center justify-center shadow-2xl">
-                <i class="fa-solid fa-user-shield text-black text-5xl"></i>
+                <i class="fa-solid fa-brain text-black text-5xl"></i>
             </div>
             <div>
                 <div class="flex items-center gap-3">
-                    <h1 class="text-4xl font-black tracking-tighter uppercase italic leading-none">Institutional <span class="text-emerald-400">Guard</span></h1>
-                    <span id="engine-status" class="status-badge status-off">OFFLINE</span>
-                    <span id="ws-status" class="status-dot status-disconnected" title="WebSocket"></span>
+                    <h1 class="text-4xl font-black tracking-tighter uppercase italic leading-none">REAL <span class="text-emerald-400">CONTEXT</span></h1>
+                    <span class="status-badge status-real">Historical Stress Test</span>
                 </div>
-                <p class="text-[11px] text-zinc-500 uppercase tracking-[0.4em] font-black mt-2 italic text-white">المقترح الثالث: SFP → 50% @ 1.5x → BE → 3x | BTC + ETH | Cross 10x</p>
+                <p class="text-[11px] text-zinc-500 uppercase tracking-[0.4em] font-black mt-2 italic text-white">العقل العشوائي ضد أسوأ فترات السوق (آخر 60 يوم) | مخاطرة ثابتة 5%</p>
             </div>
         </div>
-        <div class="flex gap-8 items-center z-10">
-            <div class="text-center">
-                <span class="text-[10px] text-zinc-600 block uppercase font-black mb-1">الرصيد الحي</span>
-                <span id="balance-display" class="mono text-5xl font-black text-white italic tracking-tighter">$0.00</span>
-            </div>
-            <div class="alpha-glass p-6 text-center min-w-[140px]">
-                <span class="text-[9px] text-zinc-500 block uppercase font-black mb-1">صافي الربح</span>
-                <span id="total-pnl" class="text-2xl font-black text-emerald-500 mono">$0.00</span>
-            </div>
+        <div class="text-center z-10 bg-black/50 p-6 rounded-3xl border border-white/5 min-w-[220px]">
+            <span class="text-[10px] text-zinc-600 block uppercase font-black mb-1">الرصيد في قلب العاصفة</span>
+            <span id="balance-display" class="mono text-5xl font-black text-white italic tracking-tighter">$100.00</span>
         </div>
     </header>
 
-    <!-- Control Buttons -->
-    <div class="grid grid-cols-2 gap-4">
-        <button id="startBtn" onclick="startEngine()" class="btn-run py-10 rounded-3xl text-2xl font-black uppercase flex items-center justify-center gap-6 shadow-2xl">
-            <i class="fa-solid fa-play"></i> تشغيل المحرك
-        </button>
-        <button id="stopBtn" onclick="stopEngine()" class="btn-stop py-10 rounded-3xl text-2xl font-black uppercase flex items-center justify-center gap-6 shadow-2xl">
-            <i class="fa-solid fa-stop"></i> إيقاف المحرك
-        </button>
-    </div>
+    <!-- Controls -->
+    <button id="runBtn" onclick="runHistoricalSim()" class="btn-run w-full py-10 rounded-3xl text-3xl font-black uppercase flex items-center justify-center gap-8 shadow-2xl">
+        <i class="fa-solid fa-cloud-bolt"></i> إطلاق المحاكاة في "أسوأ فترات السوق"
+    </button>
 
-    <!-- Stats Row -->
-    <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+    <!-- Detailed Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div class="alpha-glass p-8 text-center border-b-4 border-b-emerald-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">الصفقات</span>
-            <div id="stat-trades" class="mono text-4xl font-black text-white">0</div>
-        </div>
-        <div class="alpha-glass p-8 text-center border-b-4 border-b-green-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">نسبة النجاح</span>
-            <div id="stat-wr" class="mono text-4xl font-black text-green-400">—</div>
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">صافي الربح</span>
+            <div id="m-pnl" class="mono text-4xl font-black text-emerald-400">$0.00</div>
         </div>
         <div class="alpha-glass p-8 text-center border-b-4 border-b-blue-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">TP Hits</span>
-            <div id="stat-tp" class="mono text-4xl font-black text-blue-400">0</div>
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">نسبة النجاح</span>
+            <div id="m-winrate" class="mono text-4xl font-black text-blue-400">0%</div>
         </div>
         <div class="alpha-glass p-8 text-center border-b-4 border-b-purple-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">مخاطرة لحظية</span>
-            <div id="m-risk" class="mono text-4xl font-black text-purple-400">$0</div>
-        </div>
-        <div class="alpha-glass p-8 text-center border-b-4 border-b-cyan-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">الرافعة</span>
-            <div id="lev-display" class="mono text-4xl font-black text-cyan-400">10x</div>
+            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">أقصى تراجع (DD)</span>
+            <div id="m-dd" class="mono text-4xl font-black text-purple-400">0%</div>
         </div>
         <div class="alpha-glass p-8 text-center border-b-4 border-b-red-500">
-            <span class="text-[10px] text-zinc-500 uppercase font-bold block mb-2 italic">W / L</span>
-            <div class="flex justify-center gap-2">
-                <span id="stat-wins" class="mono text-3xl font-black text-green-400">0</span>
-                <span class="text-zinc-600 text-3xl">/</span>
-                <span id="stat-losses" class="mono text-3xl font-black text-red-400">0</span>
-            </div>
+            <span class="text-[10px] text-zinc-600 block uppercase font-black mb-2 italic">العمليات</span>
+            <div id="m-trades" class="mono text-4xl font-black text-red-500">0</div>
         </div>
     </div>
 
-    <!-- Dual Symbol Cards + Chart -->
+    <!-- Arena -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- BTC + ETH Cards -->
-        <div class="space-y-4">
-            <!-- BTC Card -->
-            <div class="alpha-glass symbol-card btc-card p-6">
-                <div class="flex justify-between items-center mb-3">
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500 to-yellow-600 flex items-center justify-center">
-                            <i class="fa-brands fa-bitcoin text-black text-2xl"></i>
-                        </div>
-                        <div>
-                            <div class="font-black text-lg">BTC-USDT</div>
-                            <div id="btc-klines" class="text-[8px] text-zinc-500 mono">0 klines</div>
-                        </div>
-                    </div>
-                    <div id="btc-price" class="mono text-2xl font-black text-orange-400">$—</div>
-                </div>
-                <div id="btc-position" class="hidden p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                    <div class="flex justify-between items-center mb-2">
-                        <span id="btc-pos-side" class="text-xs font-black uppercase"></span>
-                        <span id="btc-pos-qty" class="mono text-[10px] text-zinc-400"></span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-[9px] text-zinc-400">
-                        <div>دخول: <span id="btc-pos-entry" class="text-white mono font-bold">—</span></div>
-                        <div>SL: <span id="btc-pos-sl" class="text-red-400 mono font-bold">—</span></div>
-                        <div>TP 1.5x: <span id="btc-pos-tp1" class="text-yellow-400 mono font-bold">—</span></div>
-                        <div>TP 3x: <span id="btc-pos-tp3" class="text-emerald-400 mono font-bold">—</span></div>
-                    </div>
-                    <div id="btc-pos-partial" class="text-[8px] text-yellow-400 mt-2 hidden font-bold">⚡ تم إغلاق 50% — SL عند Break-Even</div>
-                </div>
-                <div id="btc-no-pos" class="p-2 text-center text-zinc-700 text-[10px] font-bold uppercase tracking-widest">
-                    <i class="fa-solid fa-satellite-dish opacity-20"></i> يراقب السيولة...
+        <div class="lg:col-span-2 alpha-glass p-10 h-[550px] flex flex-col">
+            <div class="flex justify-between items-center mb-8">
+                <h3 class="text-xs font-black uppercase text-zinc-500 tracking-widest italic text-white italic">Mathematical Mind vs Market Chaos</h3>
+                <div class="flex gap-4 mono text-[10px]">
+                    <span id="price-sync" class="text-orange-400 italic">Syncing Historical Period...</span>
                 </div>
             </div>
-
-            <!-- ETH Card -->
-            <div class="alpha-glass symbol-card eth-card p-6">
-                <div class="flex justify-between items-center mb-3">
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                            <i class="fa-brands fa-ethereum text-white text-2xl"></i>
-                        </div>
-                        <div>
-                            <div class="font-black text-lg">ETH-USDT</div>
-                            <div id="eth-klines" class="text-[8px] text-zinc-500 mono">0 klines</div>
-                        </div>
-                    </div>
-                    <div id="eth-price" class="mono text-2xl font-black text-indigo-400">$—</div>
-                </div>
-                <div id="eth-position" class="hidden p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/20">
-                    <div class="flex justify-between items-center mb-2">
-                        <span id="eth-pos-side" class="text-xs font-black uppercase"></span>
-                        <span id="eth-pos-qty" class="mono text-[10px] text-zinc-400"></span>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-[9px] text-zinc-400">
-                        <div>دخول: <span id="eth-pos-entry" class="text-white mono font-bold">—</span></div>
-                        <div>SL: <span id="eth-pos-sl" class="text-red-400 mono font-bold">—</span></div>
-                        <div>TP 1.5x: <span id="eth-pos-tp1" class="text-yellow-400 mono font-bold">—</span></div>
-                        <div>TP 3x: <span id="eth-pos-tp3" class="text-emerald-400 mono font-bold">—</span></div>
-                    </div>
-                    <div id="eth-pos-partial" class="text-[8px] text-yellow-400 mt-2 hidden font-bold">⚡ تم إغلاق 50% — SL عند Break-Even</div>
-                </div>
-                <div id="eth-no-pos" class="p-2 text-center text-zinc-700 text-[10px] font-bold uppercase tracking-widest">
-                    <i class="fa-solid fa-satellite-dish opacity-20"></i> يراقب السيولة...
-                </div>
-            </div>
-        </div>
-
-        <!-- Equity Chart -->
-        <div class="lg:col-span-2 alpha-glass p-10 h-[500px] flex flex-col">
-            <h3 class="text-xs font-black uppercase text-zinc-500 tracking-widest italic mb-6">Equity Curve — Live Performance</h3>
             <div class="flex-1 relative">
                 <canvas id="mainChart"></canvas>
             </div>
         </div>
-    </div>
-
-    <!-- Execution Log -->
-    <div class="alpha-glass p-10">
-        <h3 class="text-xs font-black text-zinc-500 mb-6 tracking-widest italic uppercase">Audit Execution Log — Live Server Events</h3>
-        <div id="logBody" class="max-h-[400px] overflow-y-auto space-y-3 pr-2">
-            <div class="h-32 flex flex-col items-center justify-center opacity-10 text-center">
-                <i class="fa-solid fa-fingerprint text-5xl mb-4"></i>
-                <p class="font-bold uppercase tracking-widest italic">بانتظار اتصال المحرك...</p>
+        <div class="alpha-glass p-10 flex flex-col h-[550px]">
+            <h3 class="text-xs font-black text-zinc-500 mb-8 tracking-widest italic text-white uppercase italic">Execution Log (Pure Logic)</h3>
+            <div id="logBody" class="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar text-[11px]">
+                <div class="h-full flex flex-col items-center justify-center opacity-10 text-center px-10">
+                    <i class="fa-solid fa-tornado text-6xl mb-6"></i>
+                    <p class="font-bold uppercase tracking-widest italic text-white">بانتظار مواجهة التاريخ...</p>
+                </div>
             </div>
         </div>
     </div>
@@ -201,282 +104,151 @@
 
 <script>
 /**
- * Institutional Guard v3.0 — Live Dashboard
- * Connects to server-side Trading Engine via WebSocket
- * Displays real-time trades, positions, and equity curve
+ * Sovereign X — The Historical Random Mind
+ * ينفذ "العقل العشوائي" داخل "سياق تاريخي" (أسوأ الفترات).
  */
 
-let chart = null;
-let ws = null;
-let equityPoints = [];
-let reconnectTimer = null;
+let chart = null, isRunning = false;
+let balance = 100, capital = 100, equityPoints = [100];
+let stats = { win: 0, loss: 0, be: 0, total: 0, peak: 100, maxDD: 0 };
 
-// ============================================================================
-// WebSocket Connection to Server Engine
-// ============================================================================
+const Logic = {
+    fixedRisk: 0.05, 
+    fee: 0.001,
+    // احتمالات العقل الرياضي (حقيقية وتخسر أيضاً)
+    probWin: 0.40,    // 40% نجاح كامل
+    probPartial: 0.20 // 20% حجز نصف وتأمين دخول
+    // الباقي (40%) خسارة كاملة (تعمدنا زيادة الخسارة لمحاكاة السوق السيء)
+};
 
-function connectWS() {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${location.host}`;
-    
-    ws = new WebSocket(wsUrl);
-    
-    ws.onopen = () => {
-        document.getElementById('ws-status').className = 'status-dot status-connected';
-        addLog('SYSTEM', 'info', '🔌 متصل بالمحرك — يعرض البيانات الحية');
-        fetchStats();
-    };
-    
-    ws.onmessage = (e) => {
-        try {
-            const msg = JSON.parse(e.data);
-            handleEvent(msg.event, msg.data);
-        } catch(err) {}
-    };
-    
-    ws.onclose = () => {
-        document.getElementById('ws-status').className = 'status-dot status-disconnected';
-        if (reconnectTimer) clearTimeout(reconnectTimer);
-        reconnectTimer = setTimeout(connectWS, 3000);
-    };
-    
-    ws.onerror = () => ws.close();
+async function fetchHistoricalContext() {
+    try {
+        const r = await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1h&limit=1500');
+        const d = await r.json();
+        return d; // بيانات 1500 ساعة (أكثر من شهرين)
+    } catch(e) { return null; }
 }
 
-function handleEvent(event, data) {
-    switch(event) {
-        case 'stats':
-            updateDashboard(data);
-            break;
-        case 'price':
-            updatePrice(data.symbol, data.price);
-            break;
-        case 'log':
-            addLog(data.symbol, data.type, data.message, data.pnl);
-            break;
-        case 'trade_opened':
-        case 'trade_closed':
-        case 'partial_close':
-            fetchStats();
-            break;
-        case 'started':
-        case 'stopped':
-            updateDashboard(data);
-            break;
+async function runHistoricalSim() {
+    if(isRunning) return;
+    isRunning = true;
+    const btn = document.getElementById('runBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> جاري تحليل أسوأ فترات السوق...`;
+    
+    const marketData = await fetchHistoricalContext();
+    if(!marketData) {
+        alert("فشل جلب البيانات التاريخية.");
+        isRunning = false; btn.disabled = false; return;
     }
-}
 
-// ============================================================================
-// API Calls
-// ============================================================================
+    // تهيئة
+    balance = 100; equityPoints = [100];
+    stats = { win: 0, loss: 0, be: 0, total: 0, peak: 100, maxDD: 0 };
+    document.getElementById('logBody').innerHTML = '';
+    initChart();
 
-async function fetchStats() {
-    try {
-        const res = await fetch('/api/stats');
-        const json = await res.json();
-        if (json.success) updateDashboard(json.data);
-    } catch(e) {}
-}
+    document.getElementById('price-sync').textContent = "Period: Last 60 Days Stress Test";
 
-async function startEngine() {
-    document.getElementById('startBtn').disabled = true;
-    document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري التشغيل...';
-    try {
-        await fetch('/api/engine/start', { method: 'POST' });
-        setTimeout(fetchStats, 2000);
-    } catch(e) {}
-    setTimeout(() => {
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('startBtn').innerHTML = '<i class="fa-solid fa-play"></i> تشغيل المحرك';
-    }, 3000);
-}
-
-async function stopEngine() {
-    try {
-        await fetch('/api/engine/stop', { method: 'POST' });
-        setTimeout(fetchStats, 1000);
-    } catch(e) {}
-}
-
-// ============================================================================
-// Dashboard Update
-// ============================================================================
-
-function updateDashboard(stats) {
-    // Status
-    const statusEl = document.getElementById('engine-status');
-    if (stats.isRunning) {
-        statusEl.textContent = 'LIVE';
-        statusEl.className = 'status-badge status-live';
-    } else {
-        statusEl.textContent = 'OFFLINE';
-        statusEl.className = 'status-badge status-off';
-    }
-    
-    // Balance & PnL
-    document.getElementById('balance-display').textContent = `$${stats.balance.toFixed(2)}`;
-    const pnl = stats.totalPnl || 0;
-    const pnlEl = document.getElementById('total-pnl');
-    pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
-    pnlEl.className = `text-2xl font-black mono ${pnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`;
-    
-    // Stats
-    document.getElementById('stat-trades').textContent = stats.totalTrades || 0;
-    document.getElementById('stat-wins').textContent = stats.winTrades || 0;
-    document.getElementById('stat-losses').textContent = stats.lossTrades || 0;
-    document.getElementById('stat-tp').textContent = stats.tpHits || 0;
-    document.getElementById('lev-display').textContent = `${stats.leverage || 10}x`;
-    
-    const wr = stats.totalTrades > 0 ? ((stats.winTrades / stats.totalTrades) * 100).toFixed(0) + '%' : '—';
-    document.getElementById('stat-wr').textContent = wr;
-    
-    // Risk
-    document.getElementById('m-risk').textContent = `$${(stats.balance * 0.05).toFixed(2)}`;
-    
-    // Symbol cards
-    if (stats.symbols) {
-        for (const [sym, data] of Object.entries(stats.symbols)) {
-            const prefix = sym.includes('BTC') ? 'btc' : 'eth';
-            
-            // Price
-            if (data.price > 0) {
-                document.getElementById(`${prefix}-price`).textContent = `$${data.price.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}`;
-            }
-            document.getElementById(`${prefix}-klines`).textContent = `${data.klineCount} klines`;
-            
-            // Position
-            if (data.hasPosition && data.position) {
-                const pos = data.position;
-                document.getElementById(`${prefix}-position`).classList.remove('hidden');
-                document.getElementById(`${prefix}-no-pos`).classList.add('hidden');
-                
-                const sideEl = document.getElementById(`${prefix}-pos-side`);
-                sideEl.textContent = `${pos.side} ${pos.positionSide}`;
-                sideEl.className = `text-xs font-black uppercase ${pos.side === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`;
-                
-                document.getElementById(`${prefix}-pos-qty`).textContent = `Qty: ${pos.quantity}`;
-                document.getElementById(`${prefix}-pos-entry`).textContent = `$${pos.entryPrice.toFixed(2)}`;
-                document.getElementById(`${prefix}-pos-sl`).textContent = `$${pos.stopLoss.toFixed(2)}`;
-                document.getElementById(`${prefix}-pos-tp1`).textContent = `$${pos.takeProfit1x5.toFixed(2)}`;
-                document.getElementById(`${prefix}-pos-tp3`).textContent = `$${pos.takeProfit3x.toFixed(2)}`;
-                
-                if (pos.partialClosed) {
-                    document.getElementById(`${prefix}-pos-partial`).classList.remove('hidden');
-                } else {
-                    document.getElementById(`${prefix}-pos-partial`).classList.add('hidden');
-                }
-            } else {
-                document.getElementById(`${prefix}-position`).classList.add('hidden');
-                document.getElementById(`${prefix}-no-pos`).classList.remove('hidden');
-            }
+    let i = 0;
+    const loop = setInterval(() => {
+        if (i >= 100 || balance <= 1) {
+            clearInterval(loop);
+            isRunning = false; btn.disabled = false;
+            btn.innerHTML = `<i class="fa-solid fa-play"></i> إعادة إطلاق المحاكاة التاريخية`;
+            return;
         }
-    }
-    
-    // Equity chart
-    if (stats.balance > 0) {
-        equityPoints.push(stats.balance);
-        if (equityPoints.length > 500) equityPoints.shift();
+
+        executeProbabilisticTrade(i);
+        updateUI();
         updateChart();
+        i++;
+    }, 80);
+}
+
+function executeProbabilisticTrade(index) {
+    const riskAmt = balance * Logic.fixedRisk;
+    const feeAmt = (riskAmt * 10) * Logic.fee;
+    
+    const rand = Math.random();
+    let pnl = 0, label = "", styleClass = "";
+
+    // تنفيذ العقل العشوائي (الذي يربح ويخسر كما طلبت)
+    if (rand < Logic.probWin) {
+        pnl = (riskAmt * 0.5 * 1.5) + (riskAmt * 0.5 * 3.0) - feeAmt;
+        label = "FULL TARGET HIT (3.0x)";
+        styleClass = "win-border";
+        stats.win++;
+    } else if (rand < (Logic.probWin + Logic.probPartial)) {
+        pnl = (riskAmt * 0.5 * 1.5) - feeAmt;
+        label = "PARTIAL HIT & BE (1.5x)";
+        styleClass = "be-border";
+        stats.be++;
+    } else {
+        pnl = -riskAmt - feeAmt;
+        label = "STOP LOSS TRIGGERED";
+        styleClass = "loss-border";
+        stats.loss++;
     }
+
+    balance += pnl;
+    equityPoints.push(balance);
+    stats.total++;
+    
+    if (balance > stats.peak) stats.peak = balance;
+    stats.maxDD = Math.max(stats.maxDD, ((stats.peak - balance) / stats.peak) * 100);
+
+    addLog(index + 1, pnl, label, styleClass);
 }
 
-function updatePrice(symbol, price) {
-    const prefix = symbol.includes('BTC') ? 'btc' : 'eth';
-    document.getElementById(`${prefix}-price`).textContent = `$${price.toLocaleString('en-US', {minimumFractionDigits: 1, maximumFractionDigits: 1})}`;
-}
-
-// ============================================================================
-// Log System
-// ============================================================================
-
-function addLog(symbol, type, message, pnl) {
+function addLog(tradeNum, pnl, label, style) {
     const log = document.getElementById('logBody');
-    
-    // Clear placeholder
-    if (log.querySelector('.fa-fingerprint')) log.innerHTML = '';
-    
     const div = document.createElement('div');
-    const colors = {
-        'trade': 'border-emerald-500 bg-emerald-500/5',
-        'close': pnl >= 0 ? 'border-blue-500 bg-blue-500/5' : 'border-red-500 bg-red-500/5',
-        'partial': 'border-yellow-500 bg-yellow-500/5',
-        'signal': 'border-purple-500 bg-purple-500/5',
-        'error': 'border-red-500 bg-red-500/5',
-        'info': 'border-zinc-700 bg-zinc-800/30',
-    };
-    
-    const color = colors[type] || colors['info'];
-    const time = new Date().toLocaleTimeString('en-US', { hour12: false });
-    
-    div.className = `p-3 rounded-xl border-r-4 ${color} log-entry`;
+    div.className = `p-4 rounded-2xl ${style} font-bold italic log-item`;
     div.innerHTML = `
-        <div class="flex justify-between items-center">
-            <span class="text-[10px] font-bold uppercase">[${symbol}] ${message}</span>
-            ${pnl !== undefined ? `<span class="mono text-xs font-black ${pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(4)}</span>` : ''}
+        <div class="flex justify-between items-center uppercase text-[10px]">
+            <span>Trade #${tradeNum} - ${label}</span>
+            <span class="${pnl >= 0 ? 'text-emerald-400' : 'text-red-500'} mono">${pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}$</span>
         </div>
-        <div class="text-[7px] text-zinc-600 mt-1 mono">${time}</div>
+        <p class="text-[7px] text-zinc-600 mt-1 uppercase italic tracking-widest">
+            Fixed Risk: 5.0% | Probabilistic Mind Decision
+        </p>
     `;
     log.prepend(div);
-    
-    // Keep max 200 entries
-    while (log.children.length > 200) log.removeChild(log.lastChild);
 }
 
-// ============================================================================
-// Chart
-// ============================================================================
+function updateUI() {
+    document.getElementById('balance-display').textContent = `$${balance.toFixed(2)}`;
+    const pnl = balance - capital;
+    document.getElementById('m-pnl').textContent = `$${pnl.toFixed(2)}`;
+    document.getElementById('m-pnl').className = `mono text-4xl font-black italic ${pnl >= 0 ? 'text-emerald-400' : 'text-red-500'}`;
+    const wr = ((stats.win + stats.be) / stats.total * 100).toFixed(1);
+    document.getElementById('m-winrate').textContent = `${wr}%`;
+    document.getElementById('m-dd').textContent = `${stats.maxDD.toFixed(1)}%`;
+    document.getElementById('m-trades').textContent = stats.total;
+}
 
 function initChart() {
     const ctx = document.getElementById('mainChart').getContext('2d');
     if (chart) chart.destroy();
     chart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: [0],
-            datasets: [{
-                data: [0],
-                borderColor: '#10b981',
-                borderWidth: 2,
-                pointRadius: 0,
-                fill: true,
-                backgroundColor: 'rgba(16, 185, 129, 0.05)',
-                tension: 0.4
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: { display: false },
-                y: { display: true, grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color: '#555', font: { family: 'JetBrains Mono', size: 10 } } }
-            },
-            plugins: { legend: { display: false } }
+        data: { labels: [0], datasets: [{ data: [100], borderColor: '#10b981', borderWidth: 3, pointRadius: 0, fill: true, backgroundColor: 'rgba(16, 185, 129, 0.05)', tension: 0.4 }] },
+        options: { 
+            responsive: true, maintainAspectRatio: false, 
+            scales: { x: { display: false }, y: { grid: { color: 'rgba(255,255,255,0.02)' }, ticks: { color: '#555' } } }, 
+            plugins: { legend: { display: false } } 
         }
     });
 }
 
 function updateChart() {
-    if (!chart) return;
     chart.data.labels = equityPoints.map((_, i) => i);
     chart.data.datasets[0].data = equityPoints;
     chart.update('none');
 }
 
-// ============================================================================
-// Auto-refresh stats every 5 seconds
-// ============================================================================
-
-setInterval(fetchStats, 5000);
-
-// ============================================================================
-// Init
-// ============================================================================
-
-window.onload = () => {
-    initChart();
-    connectWS();
-    fetchStats();
-};
+window.onload = initChart;
 </script>
 </body>
 </html>
