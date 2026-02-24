@@ -87,8 +87,8 @@ const CONFIG = {
   SYMBOLS: ["BTC-USDT", "ETH-USDT"] as const,
 
   // === USER'S EXACT FINANCIAL FRAMEWORK ===
-  RISK_PERCENT: 0.05,          // 5% of live balance per trade
-  RISK_CAP: 50.0,              // Max $50 risk per trade
+  RISK_PERCENT: 0.05,          // 5% of live balance per trade (dynamic, scales with balance)
+  RISK_CAP: Infinity,          // No cap — pure 5% of balance, grows with capital
   FEE_RATE: 0.001,             // 0.1% total fee
   LEVERAGE: 10,                // 10x leverage
   MARGIN_MODE: "CROSSED",      // Cross Margin
@@ -368,9 +368,22 @@ export class TradingEngine {
     state.lastSignalTime = Date.now();
     await this.syncBalance();
 
-    const riskAmount = Math.min(this.balance * CONFIG.RISK_PERCENT, CONFIG.RISK_CAP);
     const entryPrice = state.price;
-    
+
+    // Guard: price must be valid before any calculation
+    if (!entryPrice || entryPrice <= 0 || !isFinite(entryPrice)) {
+      this.log("info", symbol, `⚠️ Skipping trade: price is invalid (${entryPrice})`);
+      return;
+    }
+
+    // Guard: balance must be loaded
+    if (!this.balance || this.balance <= 0) {
+      this.log("info", symbol, `⚠️ Skipping trade: balance not loaded (${this.balance})`);
+      return;
+    }
+
+    const riskAmount = this.balance * CONFIG.RISK_PERCENT; // Pure 5% of balance, no cap
+
     // Fixed 0.5% SL for the probabilistic model
     const slPercent = 0.005;
     const stopLoss = side === "BUY" ? entryPrice * (1 - slPercent) : entryPrice * (1 + slPercent);
@@ -379,8 +392,15 @@ export class TradingEngine {
     let quantity = (riskAmount * CONFIG.LEVERAGE) / entryPrice;
     quantity = symbol === "BTC-USDT" ? Math.floor(quantity * 1000) / 1000 : Math.floor(quantity * 100) / 100;
 
-    if (quantity < (CONFIG.MIN_QTY[symbol] || 0.001)) {
-      this.log("info", symbol, `⚠️ Quantity too small: ${quantity} < ${CONFIG.MIN_QTY[symbol]} — skipping`);
+    // Guard: quantity must be a valid positive finite number
+    if (!quantity || !isFinite(quantity) || isNaN(quantity) || quantity <= 0) {
+      this.log("info", symbol, `⚠️ Skipping trade: quantity is invalid (${quantity})`);
+      return;
+    }
+
+    const minQty = CONFIG.MIN_QTY[symbol] || 0.001;
+    if (quantity < minQty) {
+      this.log("info", symbol, `⚠️ Quantity too small: ${quantity} < ${minQty} (need balance ≥ $${((minQty * entryPrice) / CONFIG.LEVERAGE / CONFIG.RISK_PERCENT).toFixed(0)})`);
       return;
     }
 
