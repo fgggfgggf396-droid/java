@@ -202,6 +202,10 @@
  * Displays real-time trades, positions, and equity curve
  */
 
+const CONFIG = {
+    SYMBOLS: ['BTC-USDT', 'ETH-USDT']
+};
+
 let chart = null;
 let ws = null;
 let equityPoints = [];
@@ -353,30 +357,31 @@ function updateDashboard(data) {
     // Update Symbol Cards
     for (const sym of CONFIG.SYMBOLS) {
         const symbolData = data.symbols[sym];
+        const prefix = sym.split('-')[0].toLowerCase(); // "btc" or "eth"
         if (symbolData) {
-            document.getElementById(`${sym.toLowerCase().replace('-', '')}-price`).textContent = `$${symbolData.price.toFixed(2)}`;
-            document.getElementById(`${sym.toLowerCase().replace('-', '')}-klines`).textContent = `${symbolData.klineCount} klines`;
+            document.getElementById(`${prefix}-price`).textContent = `$${symbolData.price.toFixed(2)}`;
+            document.getElementById(`${prefix}-klines`).textContent = `${symbolData.klineCount} klines`;
 
             if (symbolData.hasPosition && symbolData.position) {
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-position`).classList.remove('hidden');
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-no-pos`).classList.add('hidden');
+                document.getElementById(`${prefix}-position`).classList.remove('hidden');
+                document.getElementById(`${prefix}-no-pos`).classList.add('hidden');
 
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-side`).textContent = symbolData.position.side;
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-qty`).textContent = `${symbolData.position.quantity.toFixed(3)} units`;
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-entry`).textContent = `$${symbolData.position.entryPrice.toFixed(2)}`;
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-sl`).textContent = `$${symbolData.position.stopLoss.toFixed(2)}`;
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-tp1`).textContent = `$${symbolData.position.takeProfit1x5.toFixed(2)}`;
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-tp3`).textContent = `$${symbolData.position.takeProfit3x.toFixed(2)}`;
+                document.getElementById(`${prefix}-pos-side`).textContent = symbolData.position.side;
+                document.getElementById(`${prefix}-pos-qty`).textContent = `${symbolData.position.quantity.toFixed(3)} units`;
+                document.getElementById(`${prefix}-pos-entry`).textContent = `$${symbolData.position.entryPrice.toFixed(2)}`;
+                document.getElementById(`${prefix}-pos-sl`).textContent = `$${symbolData.position.stopLoss.toFixed(2)}`;
+                document.getElementById(`${prefix}-pos-tp1`).textContent = `$${symbolData.position.takeProfit1x5.toFixed(2)}`;
+                document.getElementById(`${prefix}-pos-tp3`).textContent = `$${symbolData.position.takeProfit3x.toFixed(2)}`;
 
                 if (symbolData.position.partialClosed) {
-                    document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-partial`).classList.remove('hidden');
+                    document.getElementById(`${prefix}-pos-partial`).classList.remove('hidden');
                 } else {
-                    document.getElementById(`${sym.toLowerCase().replace('-', '')}-pos-partial`).classList.add('hidden');
+                    document.getElementById(`${prefix}-pos-partial`).classList.add('hidden');
                 }
 
             } else {
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-position`).classList.add('hidden');
-                document.getElementById(`${sym.toLowerCase().replace('-', '')}-no-pos`).classList.remove('hidden');
+                document.getElementById(`${prefix}-position`).classList.add('hidden');
+                document.getElementById(`${prefix}-no-pos`).classList.remove('hidden');
             }
         }
     }
@@ -420,7 +425,8 @@ function updateDashboard(data) {
 }
 
 function updatePrice(symbol, price) {
-    const priceElement = document.getElementById(`${symbol.toLowerCase().replace('-', '')}-price`);
+    const prefix = symbol.split('-')[0].toLowerCase(); // "btc" or "eth"
+    const priceElement = document.getElementById(`${prefix}-price`);
     if (priceElement) priceElement.textContent = `$${price.toFixed(2)}`;
 }
 
