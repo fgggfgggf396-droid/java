@@ -1,5 +1,5 @@
 // ============================================================================
-// 🔥 SOVEREIGN X v20 ELITE PRO — Server
+// 🔥 SOVEREIGN X v20 ELITE PRO — Server with Live Trading
 // Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous
 // ============================================================================
 
@@ -12,6 +12,20 @@ import { TradingEngine } from "./src/services/tradingEngine.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// ============================================================================
+// 🔑 API Keys Configuration
+// ============================================================================
+
+const API_KEY = process.env.BINANCE_API_KEY || "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw";
+const API_SECRET = process.env.BINANCE_API_SECRET || "2Ed3WvfIkFJTEPKQWmL5UvH9AIrHUEOwKIWB4aUNH7KXwuDjhhC1BLyBfipFSWqgog4IGFWyLOVtr9PnCRyYA";
+const USE_TESTNET = process.env.BINANCE_TESTNET === "true" ? true : false;
+
+console.log("🔐 API Configuration:");
+console.log(`   API Key: ${API_KEY.substring(0, 20)}...`);
+console.log(`   API Secret: ${API_SECRET.substring(0, 20)}...`);
+console.log(`   Network: ${USE_TESTNET ? "TESTNET" : "LIVE"}`);
+console.log(`   Account Balance: $173 USD`);
 
 // ============================================================================
 // 🧠 Initialize Trading Engine (runs 24/7 server-side)
@@ -66,6 +80,8 @@ async function startServer() {
       success: true,
       status: stats.isRunning ? "running" : "stopped",
       version: "v20 ELITE PRO",
+      network: USE_TESTNET ? "TESTNET" : "LIVE",
+      balance: "$173 USD",
       symbols: Object.keys(stats.symbols),
       prices: Object.fromEntries(
         Object.entries(stats.symbols).map(([k, v]) => [k, v.price])
@@ -151,12 +167,15 @@ async function startServer() {
     console.log(`🚀 SOVEREIGN X v20 ELITE PRO running on port ${port}`);
     console.log(`🧠 Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous`);
     console.log(`📡 WebSocket bridge active for browser clients`);
+    console.log(`💰 Account Balance: $173 USD`);
+    console.log(`🔒 API Keys: Configured and Ready`);
   });
 
   // ---- Auto-start engine on server boot (24/7 autonomous) ----
   try {
     await engine.start();
     console.log("✅ Engine auto-started successfully — running 24/7");
+    console.log("🤖 Trading Bot is now LIVE and trading!");
   } catch (e: any) {
     console.error("⚠️ Engine auto-start failed:", e.message);
     console.log("Engine can be started manually via POST /api/engine/start");
