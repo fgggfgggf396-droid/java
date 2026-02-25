@@ -45,8 +45,8 @@ async function startServer() {
   const wss = new WebSocketServer({ server });
 
   // ---- Bridge engine events to browser WebSocket clients ----
-  engine.onEvent((event, data) => {
-    const message = JSON.stringify({ event, data });
+  engine.on('log', (logMessage) => {
+    const message = JSON.stringify({ event: 'log', data: logMessage });
     wss.clients.forEach((client) => {
       if (client.readyState === WebSocket.OPEN) {
         client.send(message);
