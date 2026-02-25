@@ -31,7 +31,7 @@ console.log(`   Account Balance: $173 USD`);
 // 🧠 Initialize Trading Engine (runs 24/7 server-side)
 // ============================================================================
 
-const engine = new TradingEngine();
+const engine = new TradingEngine(API_KEY, API_SECRET);
 
 // ============================================================================
 // 📊 Express + WebSocket Server

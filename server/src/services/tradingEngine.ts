@@ -1,4 +1,9 @@
 import { EventEmitter } from "events";
+import { BingXClient } from "./bingxClient.js";
+
+// ============================================================================
+// 🧠 SOVEREIGN X Trading Engine - Real BingX Integration
+// ============================================================================
 
 export class TradingEngine extends EventEmitter {
   private isRunning = false;
@@ -13,15 +18,10 @@ export class TradingEngine extends EventEmitter {
   private responseTimes: number[] = [];
   private lastUpdateTime = Date.now();
   private updateCount = 0;
+  private bingxClient: BingXClient;
 
-  private mockPrices: any = {
-    "BTC-USDT": 66762.1,
-    "ETH-USDT": 1989.24,
-    "BNB-USDT": 617.54,
-    "SOL-USDT": 85.54,
-    "XRP-USDT": 1.4321,
-    "ADA-USDT": 0.2865,
-  };
+  // Real prices from BingX
+  private realPrices: any = {};
 
   private priceVolatility: any = {
     "BTC-USDT": 0.002,
@@ -32,8 +32,9 @@ export class TradingEngine extends EventEmitter {
     "ADA-USDT": 0.007,
   };
 
-  constructor() {
+  constructor(apiKey: string, apiSecret: string) {
     super();
+    this.bingxClient = new BingXClient(apiKey, apiSecret);
     this.initializeSymbols();
   }
 
@@ -42,14 +43,14 @@ export class TradingEngine extends EventEmitter {
     for (const symbol of symbols) {
       this.symbols[symbol] = {
         symbol,
-        price: this.mockPrices[symbol] || 0,
+        price: 0,
         lastUpdateTime: Date.now(),
-        ema12: this.mockPrices[symbol] || 0,
-        ema26: this.mockPrices[symbol] || 0,
+        ema12: 0,
+        ema26: 0,
         rsi: 50,
-        atr: (this.mockPrices[symbol] || 0) * 0.01,
+        atr: 0,
         positions: [],
-        priceHistory: [this.mockPrices[symbol] || 0],
+        priceHistory: [],
         updateCount: 0,
       };
     }
@@ -67,10 +68,20 @@ export class TradingEngine extends EventEmitter {
   async start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.log("🚀 SOVEREIGN X v21 ULTRA FAST (BingX Edition) started!");
-    this.log("⚡ WebSocket Real-Time | 100ms Updates | Instant Execution");
-    this.log("🔗 Connected to BingX | Account Balance: $173 USD");
-    this.log("📊 Using Live Market Data with 100ms Refresh Rate");
+
+    // Fetch real balance from BingX
+    const realBalance = await this.bingxClient.getBalance();
+    if (realBalance > 0) {
+      this.balance = realBalance;
+    }
+
+    this.log("🚀 SOVEREIGN X v22 REAL TRADING (BingX Live) started!");
+    this.log("⚡ Real-Time Prices | Live Order Execution | 100ms Updates");
+    this.log(`🔗 Connected to BingX | Account Balance: $${this.balance.toFixed(2)} USD`);
+    this.log("📊 Using REAL Market Data from BingX API");
+
+    // Fetch initial prices
+    await this.fetchRealPrices();
 
     this.startFastUpdateLoop();
   }
@@ -78,21 +89,48 @@ export class TradingEngine extends EventEmitter {
   async stop() {
     this.isRunning = false;
     if (this.updateInterval) clearInterval(this.updateInterval);
-    this.log("🛑 SOVEREIGN X v21 ULTRA FAST stopped");
+    this.log("🛑 SOVEREIGN X stopped");
+  }
+
+  // ---- Fetch real prices from BingX ----
+  private async fetchRealPrices() {
+    const symbols = Object.keys(this.symbols);
+    for (const symbol of symbols) {
+      try {
+        const price = await this.bingxClient.getPrice(symbol);
+        if (price > 0) {
+          this.realPrices[symbol] = price;
+          this.symbols[symbol].price = price;
+          this.symbols[symbol].priceHistory.push(price);
+          if (this.symbols[symbol].priceHistory.length > 100) {
+            this.symbols[symbol].priceHistory.shift();
+          }
+        }
+      } catch (error: any) {
+        this.log(`⚠️ Error fetching price for ${symbol}: ${error.message}`);
+      }
+    }
   }
 
   private startFastUpdateLoop() {
-    this.updateInterval = setInterval(() => {
+    this.updateInterval = setInterval(async () => {
       if (!this.isRunning) return;
 
       const startTime = Date.now();
 
       try {
-        this.updatePricesRealTime();
+        // Fetch real prices from BingX
+        await this.fetchRealPrices();
+
+        // Update balance from BingX
+        const newBalance = await this.bingxClient.getBalance();
+        if (newBalance > 0) {
+          this.balance = newBalance;
+        }
 
         for (const symbol of Object.keys(this.symbols)) {
           this.analyzeSymbolFast(symbol);
-          this.managePositionsFast(symbol);
+          await this.managePositionsFast(symbol);
         }
 
         const endTime = Date.now();
@@ -105,32 +143,15 @@ export class TradingEngine extends EventEmitter {
         this.emit("stats", this.getStats());
 
         if (this.updateCount % 100 === 0) {
-          const avgTime = this.responseTimes.reduce((a: number, b: number) => a + b, 0) / this.responseTimes.length;
+          const avgTime =
+            this.responseTimes.reduce((a: number, b: number) => a + b, 0) /
+            this.responseTimes.length;
           this.log(`⚡ Performance: ${avgTime.toFixed(2)}ms avg response time`);
         }
       } catch (error: any) {
         this.log(`❌ Update loop error: ${error.message}`);
       }
     }, 100);
-  }
-
-  private updatePricesRealTime() {
-    for (const symbol of Object.keys(this.symbols)) {
-      const data = this.symbols[symbol];
-      const volatility = this.priceVolatility[symbol] || 0.002;
-      const randomChange = (Math.random() - 0.5) * 2 * volatility;
-      const newPrice = data.price * (1 + randomChange);
-
-      data.price = newPrice;
-      data.lastUpdateTime = Date.now();
-      data.updateCount++;
-      data.priceHistory.push(newPrice);
-
-      if (data.priceHistory.length > 100) data.priceHistory.shift();
-
-      this.calculateIndicatorsFast(symbol);
-      this.emit("price", { symbol, price: newPrice, time: Date.now() });
-    }
   }
 
   private calculateIndicatorsFast(symbol: string) {
@@ -157,7 +178,8 @@ export class TradingEngine extends EventEmitter {
 
   private calculateRSIFast(prices: number[], period: number): number {
     if (prices.length < period + 1) return 50;
-    let gains = 0, losses = 0;
+    let gains = 0,
+      losses = 0;
     for (let i = prices.length - period; i < prices.length; i++) {
       const diff = prices[i] - prices[i - 1];
       if (diff > 0) gains += diff;
@@ -186,12 +208,22 @@ export class TradingEngine extends EventEmitter {
     const emaDiff = Math.abs(data.ema12 - data.ema26);
     const emaPercent = (emaDiff / data.ema26) * 100;
 
-    if (data.ema12 > data.ema26 && data.rsi > 50 && data.rsi < 80 && emaPercent > 0.5) {
+    if (
+      data.ema12 > data.ema26 &&
+      data.rsi > 50 &&
+      data.rsi < 80 &&
+      emaPercent > 0.5
+    ) {
       const confidence = Math.min(100, 50 + (data.rsi - 50) + emaPercent * 10);
       this.openPositionFast(symbol, "long", confidence);
     }
 
-    if (data.ema12 < data.ema26 && data.rsi < 50 && data.rsi > 20 && emaPercent > 0.5) {
+    if (
+      data.ema12 < data.ema26 &&
+      data.rsi < 50 &&
+      data.rsi > 20 &&
+      emaPercent > 0.5
+    ) {
       const confidence = Math.min(100, 50 + (50 - data.rsi) + emaPercent * 10);
       this.openPositionFast(symbol, "short", confidence);
     }
@@ -205,7 +237,7 @@ export class TradingEngine extends EventEmitter {
     }
   }
 
-  private openPositionFast(symbol: string, side: string, confidence: number) {
+  private async openPositionFast(symbol: string, side: string, confidence: number) {
     const data = this.symbols[symbol];
     const entryPrice = data.price;
     const leverage = 5 + (confidence / 100) * 5;
@@ -213,9 +245,39 @@ export class TradingEngine extends EventEmitter {
     const quantity = riskAmount / entryPrice;
 
     const stopLossPercent = 0.025;
-    const stopLoss = side === "long" 
-      ? entryPrice * (1 - stopLossPercent)
-      : entryPrice * (1 + stopLossPercent);
+    const stopLoss =
+      side === "long"
+        ? entryPrice * (1 - stopLossPercent)
+        : entryPrice * (1 + stopLossPercent);
+
+    // Open position on BingX
+    const bingxSide = side === "long" ? "BUY" : "SELL";
+    const orderResult = await this.bingxClient.openPosition(
+      symbol,
+      bingxSide,
+      quantity,
+      leverage
+    );
+
+    if (!orderResult) {
+      this.log(`❌ Failed to open position on BingX for ${symbol}`);
+      return;
+    }
+
+    // Set stop loss on BingX
+    await this.bingxClient.setStopLoss(
+      symbol,
+      side === "long" ? "LONG" : "SHORT",
+      stopLoss
+    );
+
+    // Set take profits on BingX
+    const tp1 = side === "long" ? entryPrice * 1.05 : entryPrice * 0.95;
+    await this.bingxClient.setTakeProfit(
+      symbol,
+      side === "long" ? "LONG" : "SHORT",
+      tp1
+    );
 
     const position = {
       symbol,
@@ -234,49 +296,55 @@ export class TradingEngine extends EventEmitter {
       profitPercent: 0,
       trailingStopLoss: stopLoss,
       partialClosedAt: [],
-      orderId: `ORD-${Date.now()}`,
+      orderId: orderResult.orderId || `ORD-${Date.now()}`,
     };
 
     data.positions.push(position);
     this.totalTrades++;
 
     this.log(
-      `⚡ OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(2)} | ` +
-      `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}%`
+      `⚡ OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(
+        2
+      )} | ` +
+        `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}% | Order: ${position.orderId}`
     );
 
     this.emit("position", position);
   }
 
-  private managePositionsFast(symbol: string) {
+  private async managePositionsFast(symbol: string) {
     const data = this.symbols[symbol];
     const currentPrice = data.price;
 
     for (const position of data.positions) {
       if (position.status === "closed") continue;
 
-      const priceDiff = position.side === "long" 
-        ? currentPrice - position.entryPrice
-        : position.entryPrice - currentPrice;
+      const priceDiff =
+        position.side === "long"
+          ? currentPrice - position.entryPrice
+          : position.entryPrice - currentPrice;
 
       position.profit = position.quantity * priceDiff;
       position.profitPercent = (priceDiff / position.entryPrice) * 100;
 
+      // Check stop loss
       if (position.side === "long" && currentPrice <= position.stopLoss) {
-        this.closePositionFast(position, currentPrice, "Stop Loss");
+        await this.closePositionFast(position, currentPrice, "Stop Loss");
         this.losingTrades++;
         continue;
       }
 
       if (position.side === "short" && currentPrice >= position.stopLoss) {
-        this.closePositionFast(position, currentPrice, "Stop Loss");
+        await this.closePositionFast(position, currentPrice, "Stop Loss");
         this.losingTrades++;
         continue;
       }
 
+      // Check take profits
       if (position.status === "open") {
         if (position.side === "long" && currentPrice >= position.takeProfit1) {
-          const profit1 = (position.quantity * 0.5) * (position.takeProfit1 - position.entryPrice);
+          const profit1 =
+            (position.quantity * 0.5) * (position.takeProfit1 - position.entryPrice);
           this.balance += profit1;
           this.totalProfit += profit1;
           position.status = "partial";
@@ -286,7 +354,8 @@ export class TradingEngine extends EventEmitter {
         }
 
         if (position.side === "short" && currentPrice <= position.takeProfit1) {
-          const profit1 = (position.quantity * 0.5) * (position.entryPrice - position.takeProfit1);
+          const profit1 =
+            (position.quantity * 0.5) * (position.entryPrice - position.takeProfit1);
           this.balance += profit1;
           this.totalProfit += profit1;
           position.status = "partial";
@@ -298,7 +367,8 @@ export class TradingEngine extends EventEmitter {
 
       if (position.status === "partial") {
         if (position.side === "long" && currentPrice >= position.takeProfit2) {
-          const profit2 = (position.quantity * 0.3) * (position.takeProfit2 - position.entryPrice);
+          const profit2 =
+            (position.quantity * 0.3) * (position.takeProfit2 - position.entryPrice);
           this.balance += profit2;
           this.totalProfit += profit2;
           position.partialClosedAt.push(Date.now());
@@ -306,7 +376,8 @@ export class TradingEngine extends EventEmitter {
         }
 
         if (position.side === "short" && currentPrice <= position.takeProfit2) {
-          const profit2 = (position.quantity * 0.3) * (position.entryPrice - position.takeProfit2);
+          const profit2 =
+            (position.quantity * 0.3) * (position.entryPrice - position.takeProfit2);
           this.balance += profit2;
           this.totalProfit += profit2;
           position.partialClosedAt.push(Date.now());
@@ -314,20 +385,22 @@ export class TradingEngine extends EventEmitter {
         }
 
         if (position.side === "long" && currentPrice >= position.takeProfit3) {
-          const profit3 = (position.quantity * 0.2) * (position.takeProfit3 - position.entryPrice);
+          const profit3 =
+            (position.quantity * 0.2) * (position.takeProfit3 - position.entryPrice);
           this.balance += profit3;
           this.totalProfit += profit3;
           this.winningTrades++;
-          this.closePositionFast(position, currentPrice, "TP3");
+          await this.closePositionFast(position, currentPrice, "TP3");
           this.log(`✅ TP3 HIT on ${symbol} | Profit: $${profit3.toFixed(2)}`);
         }
 
         if (position.side === "short" && currentPrice <= position.takeProfit3) {
-          const profit3 = (position.quantity * 0.2) * (position.entryPrice - position.takeProfit3);
+          const profit3 =
+            (position.quantity * 0.2) * (position.entryPrice - position.takeProfit3);
           this.balance += profit3;
           this.totalProfit += profit3;
           this.winningTrades++;
-          this.closePositionFast(position, currentPrice, "TP3");
+          await this.closePositionFast(position, currentPrice, "TP3");
           this.log(`✅ TP3 HIT on ${symbol} | Profit: $${profit3.toFixed(2)}`);
         }
       }
@@ -336,26 +409,36 @@ export class TradingEngine extends EventEmitter {
     data.positions = data.positions.filter((p: any) => p.status !== "closed");
   }
 
-  private closePositionFast(position: any, closePrice: number, reason: string) {
+  private async closePositionFast(position: any, closePrice: number, reason: string) {
     position.status = "closed";
-    const profit = position.side === "long"
-      ? position.quantity * (closePrice - position.entryPrice)
-      : position.quantity * (position.entryPrice - closePrice);
+    const profit =
+      position.side === "long"
+        ? position.quantity * (closePrice - position.entryPrice)
+        : position.quantity * (position.entryPrice - closePrice);
 
     this.balance += profit;
     this.totalProfit += profit;
 
+    // Close position on BingX
+    await this.bingxClient.closePosition(
+      position.symbol,
+      position.side === "long" ? "LONG" : "SHORT"
+    );
+
     this.log(
       `🔴 CLOSE ${position.side.toUpperCase()} on ${position.symbol} | ` +
-      `Reason: ${reason} | Profit: $${profit.toFixed(2)}`
+        `Reason: ${reason} | Profit: $${profit.toFixed(2)}`
     );
   }
 
   getStats() {
-    const winRate = this.totalTrades > 0 ? (this.winningTrades / this.totalTrades) * 100 : 0;
-    const avgResponseTime = this.responseTimes.length > 0 
-      ? this.responseTimes.reduce((a: number, b: number) => a + b, 0) / this.responseTimes.length 
-      : 0;
+    const winRate =
+      this.totalTrades > 0 ? (this.winningTrades / this.totalTrades) * 100 : 0;
+    const avgResponseTime =
+      this.responseTimes.length > 0
+        ? this.responseTimes.reduce((a: number, b: number) => a + b, 0) /
+          this.responseTimes.length
+        : 0;
 
     return {
       isRunning: this.isRunning,
