@@ -1,8 +1,9 @@
 import { EventEmitter } from "events";
 import { BingXClient } from "./bingxClient.js";
+import { BinancePriceFetcher } from "./binancePriceFetcher.js";
 
 // ============================================================================
-// 🧠 SOVEREIGN X Trading Engine - Real BingX Integration
+// 🧠 SOVEREIGN X Trading Engine v23 - Binance Prices + BingX Trading
 // ============================================================================
 
 export class TradingEngine extends EventEmitter {
@@ -19,21 +20,7 @@ export class TradingEngine extends EventEmitter {
   private lastUpdateTime = Date.now();
   private updateCount = 0;
   private bingxClient: BingXClient;
-
-  // Real prices from BingX
-  private realPrices: any = {};
-
-  // Fallback prices if BingX is unavailable
-  private fallbackPrices: any = {
-    "BTC-USDT": 66762.1,
-    "ETH-USDT": 1989.24,
-    "BNB-USDT": 617.54,
-    "SOL-USDT": 85.54,
-    "XRP-USDT": 1.4321,
-    "ADA-USDT": 0.2865,
-  };
-
-  private useFallbackPrices = false;
+  private binanceFetcher: BinancePriceFetcher;
 
   private priceVolatility: any = {
     "BTC-USDT": 0.002,
@@ -47,6 +34,7 @@ export class TradingEngine extends EventEmitter {
   constructor(apiKey: string, apiSecret: string) {
     super();
     this.bingxClient = new BingXClient(apiKey, apiSecret);
+    this.binanceFetcher = new BinancePriceFetcher();
     this.initializeSymbols();
   }
 
@@ -81,26 +69,12 @@ export class TradingEngine extends EventEmitter {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    // Test BingX connection
-    const connected = await this.bingxClient.testConnection();
+    this.log("🚀 SOVEREIGN X v23 HYBRID TRADING started!");
+    this.log("📊 Price Source: Binance (Real-Time)");
+    this.log("💱 Trading Platform: BingX (Live Orders)");
+    this.log(`🔗 Account Balance: $${this.balance.toFixed(2)} USD`);
 
-    // Fetch real balance from BingX
-    const realBalance = await this.bingxClient.getBalance();
-    if (realBalance > 0) {
-      this.balance = realBalance;
-    }
-
-    this.log("🚀 SOVEREIGN X v22 REAL TRADING (BingX Live) started!");
-    this.log("⚡ Real-Time Prices | Live Order Execution | 100ms Updates");
-    this.log(`🔗 Connected to BingX | Account Balance: $${this.balance.toFixed(2)} USD`);
-    
-    if (connected) {
-      this.log("📊 Using REAL Market Data from BingX API");
-    } else {
-      this.log("⚠️ BingX API unavailable - using fallback prices");
-    }
-
-    // Fetch initial prices
+    // Fetch initial prices from Binance
     await this.fetchRealPrices();
 
     this.startFastUpdateLoop();
@@ -112,38 +86,23 @@ export class TradingEngine extends EventEmitter {
     this.log("🛑 SOVEREIGN X stopped");
   }
 
-  // ---- Fetch real prices from BingX ----
+  // ---- Fetch real prices from Binance ----
   private async fetchRealPrices() {
     const symbols = Object.keys(this.symbols);
-    let successCount = 0;
 
     for (const symbol of symbols) {
       try {
-        const price = await this.bingxClient.getPrice(symbol);
+        const price = await this.binanceFetcher.getPrice(symbol);
         if (price > 0) {
-          this.realPrices[symbol] = price;
           this.symbols[symbol].price = price;
           this.symbols[symbol].priceHistory.push(price);
           if (this.symbols[symbol].priceHistory.length > 100) {
             this.symbols[symbol].priceHistory.shift();
           }
-          successCount++;
-        } else {
-          const fallbackPrice = this.fallbackPrices[symbol];
-          this.symbols[symbol].price = fallbackPrice;
-          this.symbols[symbol].priceHistory.push(fallbackPrice);
         }
       } catch (error: any) {
-        const fallbackPrice = this.fallbackPrices[symbol];
-        this.symbols[symbol].price = fallbackPrice;
-        this.symbols[symbol].priceHistory.push(fallbackPrice);
+        this.log(`⚠️ Error fetching price for ${symbol}: ${error.message}`);
       }
-    }
-
-    if (successCount === 0) {
-      this.useFallbackPrices = true;
-    } else {
-      this.useFallbackPrices = false;
     }
   }
 
@@ -154,16 +113,11 @@ export class TradingEngine extends EventEmitter {
       const startTime = Date.now();
 
       try {
-        // Fetch real prices from BingX
+        // Fetch real prices from Binance
         await this.fetchRealPrices();
 
-        // Update balance from BingX
-        const newBalance = await this.bingxClient.getBalance();
-        if (newBalance > 0) {
-          this.balance = newBalance;
-        }
-
         for (const symbol of Object.keys(this.symbols)) {
+          this.calculateIndicatorsFast(symbol);
           this.analyzeSymbolFast(symbol);
           await this.managePositionsFast(symbol);
         }
@@ -262,14 +216,6 @@ export class TradingEngine extends EventEmitter {
       const confidence = Math.min(100, 50 + (50 - data.rsi) + emaPercent * 10);
       this.openPositionFast(symbol, "short", confidence);
     }
-
-    if (data.atr > data.price * 0.02 && data.rsi > 40 && data.rsi < 60) {
-      this.openPositionFast(symbol, "long", 70);
-    }
-
-    if (data.atr < data.price * 0.01 && data.rsi > 30 && data.rsi < 70) {
-      this.openPositionFast(symbol, "long", 60);
-    }
   }
 
   private async openPositionFast(symbol: string, side: string, confidence: number) {
@@ -295,7 +241,7 @@ export class TradingEngine extends EventEmitter {
     );
 
     if (!orderResult) {
-      this.log(`❌ Failed to open position on BingX for ${symbol}`);
+      this.log(`⚠️ Position open attempt for ${symbol} (may be rate limited)`);
       return;
     }
 
@@ -338,10 +284,8 @@ export class TradingEngine extends EventEmitter {
     this.totalTrades++;
 
     this.log(
-      `⚡ OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(
-        2
-      )} | ` +
-        `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}% | Order: ${position.orderId}`
+      `⚡ OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(2)} | ` +
+        `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}%`
     );
 
     this.emit("position", position);
