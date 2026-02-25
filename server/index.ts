@@ -14,24 +14,31 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ============================================================================
-// 🔑 API Keys Configuration (BingX)
+// 🔑 API Keys Configuration (Binance Futures)
 // ============================================================================
 
-const API_KEY = process.env.BINANCE_API_KEY || "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw";
-const API_SECRET = process.env.BINANCE_API_SECRET || "2Ed3WvfIkFJTEPKQWmL5UvH9AIrHUEOwKIWB4aUNH7KXwuDjhhC1BLyBfipFSWqgog4IGFWyLOVtr9PnCRyYA";
+const API_KEY = process.env.BINANCE_API_KEY || "rKApgjXcm5xYfFAotrHRe0GpX4KjAjOVJ09efnYiat3pBZhxF0tAkRqBXravWziU";
+const API_SECRET = process.env.BINANCE_API_SECRET || "npHi0kZuuQHsStFkRFQ4PFnVfxG6EcfekqgbgSxlqSowQAvcei8lrGHo0lhvlVT";
 const USE_TESTNET = process.env.BINANCE_TESTNET === "true" ? true : false;
 
-console.log("🔐 BingX API Configuration:");
+console.log("🔐 Binance Futures API Configuration:");
 console.log(`   API Key: ${API_KEY.substring(0, 20)}...`);
 console.log(`   API Secret: ${API_SECRET.substring(0, 20)}...`);
-console.log(`   Exchange: BingX (Live Trading)`);
-console.log(`   Account Balance: $173 USD`);
+console.log(`   Exchange: Binance Futures (Live Trading)`);
+console.log(`   IP Whitelist: 34.212.75.30`);
+console.log(`   Status: LIVE 24/7`);
 
 // ============================================================================
 // 🧠 Initialize Trading Engine (runs 24/7 server-side)
 // ============================================================================
 
 const engine = new TradingEngine(API_KEY, API_SECRET);
+
+// Start the trading engine
+engine.start().catch((error: any) => {
+  console.error("❌ Failed to start trading engine:", error);
+  process.exit(1);
+});
 
 // ============================================================================
 // 📊 Express + WebSocket Server

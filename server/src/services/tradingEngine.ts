@@ -1,15 +1,15 @@
 import { EventEmitter } from "events";
-import { BingXClient } from "./bingxClient.js";
+import { BinanceClient } from "./binanceClient.js";
 import { BinancePriceFetcher } from "./binancePriceFetcher.js";
 
 // ============================================================================
-// 🧠 SOVEREIGN X Trading Engine v24 - AGGRESSIVE + SAFE
-// Keeps original v20 algorithm + adds aggressive signals
+// 🧠 SOVEREIGN X Trading Engine v25 - BINANCE LIVE TRADING
+// Original v20 algorithm + Binance Real Trading
 // ============================================================================
 
 export class TradingEngine extends EventEmitter {
   private isRunning = false;
-  private balance = 173;
+  private balance = 0;
   private totalProfit = 0;
   private totalTrades = 0;
   private winningTrades = 0;
@@ -20,27 +20,25 @@ export class TradingEngine extends EventEmitter {
   private responseTimes: number[] = [];
   private lastUpdateTime = Date.now();
   private updateCount = 0;
-  private bingxClient: BingXClient;
+  private binanceClient: BinanceClient;
   private binanceFetcher: BinancePriceFetcher;
-
-  private priceVolatility: any = {
-    "BTC-USDT": 0.002,
-    "ETH-USDT": 0.003,
-    "BNB-USDT": 0.004,
-    "SOL-USDT": 0.005,
-    "XRP-USDT": 0.006,
-    "ADA-USDT": 0.007,
-  };
 
   constructor(apiKey: string, apiSecret: string) {
     super();
-    this.bingxClient = new BingXClient(apiKey, apiSecret);
+    this.binanceClient = new BinanceClient(apiKey, apiSecret);
     this.binanceFetcher = new BinancePriceFetcher();
     this.initializeSymbols();
   }
 
   private initializeSymbols() {
-    const symbols = ["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "XRP-USDT", "ADA-USDT"];
+    const symbols = [
+      "BTCUSDT",
+      "ETHUSDT",
+      "BNBUSDT",
+      "SOLUSDT",
+      "XRPUSDT",
+      "ADAUSDT",
+    ];
     for (const symbol of symbols) {
       this.symbols[symbol] = {
         symbol,
@@ -70,13 +68,18 @@ export class TradingEngine extends EventEmitter {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    this.log("🚀 SOVEREIGN X v24 AGGRESSIVE TRADING started!");
+    this.log("🚀 SOVEREIGN X v25 BINANCE LIVE TRADING started!");
     this.log("📊 Price Source: Binance (Real-Time)");
-    this.log("💱 Trading Platform: BingX (Live Orders)");
-    this.log(`🔗 Account Balance: $${this.balance.toFixed(2)} USD`);
-    this.log("🎯 Mode: AGGRESSIVE - Original v20 + Enhanced Signals");
+    this.log("💱 Trading Platform: Binance Futures (Live Orders)");
 
-    // Fetch initial prices from Binance
+    // Get initial balance
+    const balances = await this.binanceClient.getBalance();
+    const usdtBalance = balances["USDT"]?.free || 0;
+    this.balance = usdtBalance;
+    this.log(`🔗 Account Balance: $${this.balance.toFixed(2)} USDT`);
+    this.log("🎯 Mode: AGGRESSIVE - Original v20 + Binance Real Trading");
+
+    // Fetch initial prices
     await this.fetchRealPrices();
 
     this.startFastUpdateLoop();
@@ -88,13 +91,12 @@ export class TradingEngine extends EventEmitter {
     this.log("🛑 SOVEREIGN X stopped");
   }
 
-  // ---- Fetch real prices from Binance ----
   private async fetchRealPrices() {
     const symbols = Object.keys(this.symbols);
 
     for (const symbol of symbols) {
       try {
-        const price = await this.binanceFetcher.getPrice(symbol);
+        const price = await this.binanceClient.getPrice(symbol);
         if (price > 0) {
           this.symbols[symbol].price = price;
           this.symbols[symbol].priceHistory.push(price);
@@ -115,7 +117,6 @@ export class TradingEngine extends EventEmitter {
       const startTime = Date.now();
 
       try {
-        // Fetch real prices from Binance
         await this.fetchRealPrices();
 
         for (const symbol of Object.keys(this.symbols)) {
@@ -199,7 +200,7 @@ export class TradingEngine extends EventEmitter {
     const emaDiff = Math.abs(data.ema12 - data.ema26);
     const emaPercent = (emaDiff / data.ema26) * 100;
 
-    // ORIGINAL SIGNALS (v20 ELITE PRO - Proven $7000+ profit)
+    // ORIGINAL SIGNALS (v20 ELITE PRO)
     if (
       data.ema12 > data.ema26 &&
       data.rsi > 50 &&
@@ -222,8 +223,7 @@ export class TradingEngine extends EventEmitter {
       return;
     }
 
-    // AGGRESSIVE SIGNALS (Additional opportunities)
-    // Strong uptrend: EMA12 > EMA26 with moderate RSI
+    // AGGRESSIVE SIGNALS
     if (
       data.ema12 > data.ema26 &&
       data.rsi > 45 &&
@@ -231,12 +231,13 @@ export class TradingEngine extends EventEmitter {
       emaPercent > 0.3
     ) {
       const confidence = Math.min(100, 40 + (data.rsi - 45) + emaPercent * 8);
-      this.log(`📊 ${symbol}: Aggressive LONG signal (EMA trend + RSI momentum)`);
+      this.log(
+        `📊 ${symbol}: Aggressive LONG signal (EMA trend + RSI momentum)`
+      );
       this.openPositionFast(symbol, "long", confidence);
       return;
     }
 
-    // Strong downtrend: EMA12 < EMA26 with moderate RSI
     if (
       data.ema12 < data.ema26 &&
       data.rsi < 55 &&
@@ -244,12 +245,13 @@ export class TradingEngine extends EventEmitter {
       emaPercent > 0.3
     ) {
       const confidence = Math.min(100, 40 + (55 - data.rsi) + emaPercent * 8);
-      this.log(`📊 ${symbol}: Aggressive SHORT signal (EMA trend + RSI momentum)`);
+      this.log(
+        `📊 ${symbol}: Aggressive SHORT signal (EMA trend + RSI momentum)`
+      );
       this.openPositionFast(symbol, "short", confidence);
       return;
     }
 
-    // RSI oversold (potential bounce)
     if (data.rsi < 35 && data.ema12 > data.ema26 * 0.99) {
       const confidence = Math.min(100, 35 + (35 - data.rsi));
       this.log(`📊 ${symbol}: Oversold LONG signal (RSI bounce opportunity)`);
@@ -257,10 +259,11 @@ export class TradingEngine extends EventEmitter {
       return;
     }
 
-    // RSI overbought (potential pullback)
     if (data.rsi > 65 && data.ema12 < data.ema26 * 1.01) {
       const confidence = Math.min(100, 35 + (data.rsi - 65));
-      this.log(`📊 ${symbol}: Overbought SHORT signal (RSI pullback opportunity)`);
+      this.log(
+        `📊 ${symbol}: Overbought SHORT signal (RSI pullback opportunity)`
+      );
       this.openPositionFast(symbol, "short", confidence);
       return;
     }
@@ -279,30 +282,30 @@ export class TradingEngine extends EventEmitter {
         ? entryPrice * (1 - stopLossPercent)
         : entryPrice * (1 + stopLossPercent);
 
-    // Try to open position on BingX
-    let orderResult = null;
-    const bingxSide = side === "long" ? "BUY" : "SELL";
-    orderResult = await this.bingxClient.openPosition(
+    // Open position on Binance
+    const binanceSide = side === "long" ? "BUY" : "SELL";
+    const orderResult = await this.binanceClient.openPosition(
       symbol,
-      bingxSide,
+      binanceSide as "BUY" | "SELL",
       quantity,
       leverage
     );
 
     if (orderResult) {
-      // Set stop loss on BingX
-      await this.bingxClient.setStopLoss(
+      // Set stop loss on Binance
+      await this.binanceClient.setStopLoss(
         symbol,
         side === "long" ? "LONG" : "SHORT",
         stopLoss
       );
 
-      // Set take profits on BingX
+      // Set take profits on Binance
       const tp1 = side === "long" ? entryPrice * 1.05 : entryPrice * 0.95;
-      await this.bingxClient.setTakeProfit(
+      await this.binanceClient.setTakeProfit(
         symbol,
         side === "long" ? "LONG" : "SHORT",
-        tp1
+        tp1,
+        quantity * 0.5
       );
     }
 
@@ -444,8 +447,8 @@ export class TradingEngine extends EventEmitter {
     this.balance += profit;
     this.totalProfit += profit;
 
-    // Close position on BingX
-    await this.bingxClient.closePosition(
+    // Close position on Binance
+    await this.binanceClient.closePosition(
       position.symbol,
       position.side === "long" ? "LONG" : "SHORT"
     );
