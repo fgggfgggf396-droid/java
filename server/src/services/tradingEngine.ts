@@ -27,7 +27,9 @@ interface ActivePosition {
   originalQuantity: number;
   stopLoss: number;
   takeProfit1x5: number;
+  takeProfit2x: number;
   takeProfit3x: number;
+  partial2Closed: boolean;
   riskAmount: number;
   riskPerUnit: number;
   partialClosed: boolean;
@@ -405,6 +407,7 @@ export class TradingEngine {
     }
 
     const tp1x5 = side === "BUY" ? entryPrice + riskPerUnit * 1.5 : entryPrice - riskPerUnit * 1.5;
+    const tp2x = side === "BUY" ? entryPrice + riskPerUnit * 2.25 : entryPrice - riskPerUnit * 2.25;
     const tp3x = side === "BUY" ? entryPrice + riskPerUnit * 3 : entryPrice - riskPerUnit * 3;
 
     this.log("trade", symbol, `🎲 Probabilistic ${side}: qty=${quantity}, entry=$${entryPrice.toFixed(2)}`);
@@ -441,10 +444,12 @@ export class TradingEngine {
           originalQuantity: quantity,
           stopLoss,
           takeProfit1x5: tp1x5,
+          takeProfit2x: tp2x,
           takeProfit3x: tp3x,
           riskAmount,
           riskPerUnit,
           partialClosed: false,
+          partial2Closed: false,
           breakEvenMoved: false,
           openTime: Date.now(),
         };
@@ -494,8 +499,23 @@ export class TradingEngine {
         }
       }
 
-      // ---- PHASE 3: 3x REACHED → Close remaining 50% ----
-      if (pos.partialClosed && riskMultiple >= 3.0) {
+      // ---- PHASE 3: 2.25x REACHED → Close 30% of remaining (15% of total) ----
+      if (pos.partialClosed && !pos.partial2Closed && riskMultiple >= 2.25) {
+        const partial2Qty = this.roundQty(sym, pos.quantity * 0.3);
+        if (partial2Qty > 0) {
+          this.log("partial", sym, `🎯 2.25x REACHED ($${currentPrice.toFixed(2)}) — Closing 30% of remaining (${partial2Qty})`);
+          const success = await this.closePartial(sym, partial2Qty);
+          if (success) {
+            pos.partial2Closed = true;
+            pos.quantity = this.roundQty(sym, pos.quantity - partial2Qty);
+            this.tpHits++;
+            this.emit("partial_close", { symbol: sym, position: pos });
+          }
+        }
+      }
+
+      // ---- PHASE 4: 3x REACHED → Close remaining 100% ----
+      if (pos.partial2Closed && riskMultiple >= 3.0) {
         this.log("close", sym, `🏆 3x FULL TARGET ($${currentPrice.toFixed(2)}) — Closing remaining ${pos.quantity}`);
         this.tpHits++;
         await this.closePosition(sym, pos.quantity, "TP_3X");
