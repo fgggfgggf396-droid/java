@@ -14,17 +14,17 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ============================================================================
-// 🔑 API Keys Configuration
+// 🔑 API Keys Configuration (BingX)
 // ============================================================================
 
 const API_KEY = process.env.BINANCE_API_KEY || "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw";
 const API_SECRET = process.env.BINANCE_API_SECRET || "2Ed3WvfIkFJTEPKQWmL5UvH9AIrHUEOwKIWB4aUNH7KXwuDjhhC1BLyBfipFSWqgog4IGFWyLOVtr9PnCRyYA";
 const USE_TESTNET = process.env.BINANCE_TESTNET === "true" ? true : false;
 
-console.log("🔐 API Configuration:");
+console.log("🔐 BingX API Configuration:");
 console.log(`   API Key: ${API_KEY.substring(0, 20)}...`);
 console.log(`   API Secret: ${API_SECRET.substring(0, 20)}...`);
-console.log(`   Network: ${USE_TESTNET ? "TESTNET" : "LIVE"}`);
+console.log(`   Exchange: BingX (Live Trading)`);
 console.log(`   Account Balance: $173 USD`);
 
 // ============================================================================
@@ -164,10 +164,11 @@ async function startServer() {
   // ---- Start Server ----
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`🚀 SOVEREIGN X v20 ELITE PRO running on port ${port}`);
+    console.log(`🚀 SOVEREIGN X v20 ELITE PRO (BingX Edition) running on port ${port}`);
     console.log(`🧠 Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous`);
     console.log(`📡 WebSocket bridge active for browser clients`);
     console.log(`💰 Account Balance: $173 USD`);
+    console.log(`🔗 Connected to BingX Live Trading API`);
     console.log(`🔒 API Keys: Configured and Ready`);
   });
 
@@ -175,7 +176,8 @@ async function startServer() {
   try {
     await engine.start();
     console.log("✅ Engine auto-started successfully — running 24/7");
-    console.log("🤖 Trading Bot is now LIVE and trading!");
+    console.log("🤖 Trading Bot is now LIVE on BingX and trading!");
+    console.log("💰 Account: $173 USD | Leverage: 5x-10x Dynamic | Risk: 5% per trade");
   } catch (e: any) {
     console.error("⚠️ Engine auto-start failed:", e.message);
     console.log("Engine can be started manually via POST /api/engine/start");

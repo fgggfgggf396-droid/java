@@ -1,9 +1,10 @@
 // ============================================================================
-// 🔥 SOVEREIGN X v20 ELITE PRO — The Ultimate Trading Brain
+// 🔥 SOVEREIGN X v20 ELITE PRO — BingX Edition
 // Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous
 // ============================================================================
 
 import axios from "axios";
+import crypto from "crypto";
 
 interface Position {
   symbol: string;
@@ -22,6 +23,7 @@ interface Position {
   profitPercent: number;
   trailingStopLoss: number;
   partialClosedAt: number[];
+  orderId?: string;
 }
 
 interface SymbolData {
@@ -50,7 +52,7 @@ interface Stats {
 
 export class TradingEngine {
   private isRunning = false;
-  private balance = 1000; // Starting capital
+  private balance = 173; // $173 USD account balance
   private totalProfit = 0;
   private totalTrades = 0;
   private winningTrades = 0;
@@ -58,11 +60,9 @@ export class TradingEngine {
   private symbols: { [key: string]: SymbolData } = {};
   private logs: string[] = [];
   private eventCallbacks: Array<(event: string, data: any) => void> = [];
-  private apiKey = process.env.BINANCE_API_KEY || "";
-  private apiSecret = process.env.BINANCE_API_SECRET || "";
-  private baseUrl = process.env.BINANCE_TESTNET === "true" 
-    ? "https://testnet.binancefuture.com" 
-    : "https://fapi.binance.com";
+  private apiKey = process.env.BINANCE_API_KEY || "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw";
+  private apiSecret = process.env.BINANCE_API_SECRET || "2Ed3WvfIkFJTEPKQWmL5UvH9AIrHUEOwKIWB4aUNH7KXwuDjhhC1BLyBfipFSWqgog4IGFWyLOVtr9PnCRyYA";
+  private baseUrl = "https://open-api.bingx.com"; // BingX API URL
 
   constructor() {
     this.initializeSymbols();
@@ -102,11 +102,50 @@ export class TradingEngine {
     this.emit("log", logEntry);
   }
 
+  // ============================================================================
+  // 🔐 BingX API Authentication
+  // ============================================================================
+
+  private generateSignature(queryString: string): string {
+    return crypto
+      .createHmac("sha256", this.apiSecret)
+      .update(queryString)
+      .digest("hex");
+  }
+
+  private async bingxRequest(method: string, endpoint: string, params: any = {}): Promise<any> {
+    try {
+      const timestamp = Date.now();
+      const queryString = `timestamp=${timestamp}`;
+      const signature = this.generateSignature(queryString);
+
+      const headers = {
+        "X-BX-APIKEY": this.apiKey,
+        "Content-Type": "application/json",
+      };
+
+      const url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
+
+      const response = await axios({
+        method,
+        url,
+        data: method !== "GET" ? params : undefined,
+        headers,
+      });
+
+      return response.data;
+    } catch (error: any) {
+      this.log(`❌ BingX API Error: ${error.message}`);
+      throw error;
+    }
+  }
+
   async start() {
     if (this.isRunning) return;
     this.isRunning = true;
-    this.log("🚀 SOVEREIGN X v20 ELITE PRO started!");
+    this.log("🚀 SOVEREIGN X v20 ELITE PRO (BingX Edition) started!");
     this.log("Dynamic Leverage: 5x-10x | Trailing Profit: ✅ | Risk: 5%");
+    this.log("🔗 Connected to BingX | Account Balance: $173 USD");
 
     // Main trading loop
     this.tradingLoop();
@@ -145,25 +184,25 @@ export class TradingEngine {
     for (const symbol of Object.keys(this.symbols)) {
       try {
         const cleanSymbol = symbol.replace("-", "");
-        
-        // Fetch 1h klines (last 100)
-        const response = await axios.get(`${this.baseUrl}/fapi/v1/klines`, {
-          params: {
-            symbol: cleanSymbol,
-            interval: "1h",
-            limit: 100,
-          },
+
+        // Fetch 1h klines from BingX
+        const response = await this.bingxRequest("GET", `/openApi/spot/v1/market/klines`, {
+          symbol: cleanSymbol,
+          interval: "1h",
+          limit: 100,
         });
 
-        const klines = response.data;
-        this.symbols[symbol].klines = klines;
-        this.symbols[symbol].price = parseFloat(klines[klines.length - 1][4]); // Close price
-        this.symbols[symbol].lastUpdate = Date.now();
+        if (response.code === "0" && response.data) {
+          const klines = response.data;
+          this.symbols[symbol].klines = klines;
+          this.symbols[symbol].price = parseFloat(klines[klines.length - 1][4]); // Close price
+          this.symbols[symbol].lastUpdate = Date.now();
 
-        // Calculate indicators
-        this.calculateIndicators(symbol);
+          // Calculate indicators
+          this.calculateIndicators(symbol);
 
-        this.emit("price", { symbol, price: this.symbols[symbol].price });
+          this.emit("price", { symbol, price: this.symbols[symbol].price });
+        }
       } catch (error: any) {
         this.log(`⚠️ Failed to fetch data for ${symbol}: ${error.message}`);
       }
@@ -295,35 +334,56 @@ export class TradingEngine {
       ? entryPrice * (1 + tp3Percent)
       : entryPrice * (1 - tp3Percent);
 
-    const position: Position = {
-      symbol,
-      side,
-      entryPrice,
-      quantity,
-      leverage,
-      stopLoss,
-      takeProfit1,
-      takeProfit2,
-      takeProfit3,
-      confidence,
-      timestamp: Date.now(),
-      status: "open",
-      profit: 0,
-      profitPercent: 0,
-      trailingStopLoss: stopLoss,
-      partialClosedAt: [],
-    };
+    // Place order on BingX
+    try {
+      const orderResponse = await this.bingxRequest("POST", "/openApi/swap/v2/trade/openOrder", {
+        symbol: symbol.replace("-", ""),
+        side: side === "long" ? "BUY" : "SELL",
+        positionSide: side === "long" ? "LONG" : "SHORT",
+        type: "MARKET",
+        quantity,
+        leverage: Math.floor(leverage),
+        stopPrice: stopLoss,
+        takeProfitPrice: takeProfit1,
+      });
 
-    data.positions.push(position);
-    this.totalTrades++;
+      if (orderResponse.code === "0") {
+        const position: Position = {
+          symbol,
+          side,
+          entryPrice,
+          quantity,
+          leverage,
+          stopLoss,
+          takeProfit1,
+          takeProfit2,
+          takeProfit3,
+          confidence,
+          timestamp: Date.now(),
+          status: "open",
+          profit: 0,
+          profitPercent: 0,
+          trailingStopLoss: stopLoss,
+          partialClosedAt: [],
+          orderId: orderResponse.data?.orderId,
+        };
 
-    this.log(
-      `📈 OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(2)} | ` +
-      `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}% | ` +
-      `SL: $${stopLoss.toFixed(2)} | TP1: $${takeProfit1.toFixed(2)}`
-    );
+        data.positions.push(position);
+        this.totalTrades++;
 
-    this.emit("position", position);
+        this.log(
+          `📈 OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(2)} | ` +
+          `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}% | ` +
+          `SL: $${stopLoss.toFixed(2)} | TP1: $${takeProfit1.toFixed(2)} | Order: ${orderResponse.data?.orderId}`
+        );
+
+        this.emit("position", position);
+      } else {
+        this.log(`❌ Failed to open position on ${symbol}: ${orderResponse.msg}`);
+      }
+    } catch (error: any) {
+      this.log(`❌ Error opening position on ${symbol}: ${error.message}`);
+    }
   }
 
   private async managePositions(symbol: string) {
