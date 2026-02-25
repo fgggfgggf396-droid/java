@@ -60,8 +60,9 @@ export class TradingEngine {
   private symbols: { [key: string]: SymbolData } = {};
   private logs: string[] = [];
   private eventCallbacks: Array<(event: string, data: any) => void> = [];
-  private apiKey = process.env.BINANCE_API_KEY || "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw";
-  private apiSecret = process.env.BINANCE_API_SECRET || "2Ed3WvfIkFJTEPKQWmL5UvH9AIrHUEOwKIWB4aUNH7KXwuDjhhC1BLyBfipFSWqgog4IGFWyLOVtr9PnCRyYA";
+  // BingX API Keys (hardcoded for reliability)
+  private apiKey = "Z4YVpLtqHiDogxdIV5gPD0N1V3dAOuKcW0VD9y76IObcDnqhrRWTstb0oDfMCPmgT7heYk308TPicY7rM0rGw";
+  private apiSecret = "2Ed3WvfIkFJTEPKQWmL5UvH9AIrHUEOwKIWB4aUNH7KXwuDjhhC1BLyBfipFSWqgog4IGFWyLOVtr9PnCRyYA";
   private baseUrl = "https://open-api.bingx.com"; // BingX API URL
 
   constructor() {
