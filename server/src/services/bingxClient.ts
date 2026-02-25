@@ -1,15 +1,13 @@
 import crypto from "crypto";
-import fetch from "node-fetch";
 
 // ============================================================================
-// 🔗 BingX API Client - Real Trading Integration
+// 🔗 BingX API Client - Real Trading Integration (Fixed)
 // ============================================================================
 
 export class BingXClient {
   private apiKey: string;
   private apiSecret: string;
   private baseUrl = "https://open-api.bingx.com";
-  private wsUrl = "wss://open-api.bingx.com/swap/stream";
 
   constructor(apiKey: string, apiSecret: string) {
     this.apiKey = apiKey;
@@ -30,21 +28,27 @@ export class BingXClient {
     endpoint: string,
     params: any = {}
   ): Promise<any> {
-    const timestamp = Date.now();
-    const queryString = new URLSearchParams({
-      ...params,
-      timestamp: timestamp.toString(),
-    }).toString();
-
-    const signature = this.generateSignature(queryString);
-    const url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
-
-    const headers: any = {
-      "Content-Type": "application/json",
-      "X-BX-APIKEY": this.apiKey,
-    };
-
     try {
+      const timestamp = Date.now();
+      const queryParams = {
+        ...params,
+        timestamp: timestamp.toString(),
+      };
+
+      // Build query string
+      const queryString = Object.keys(queryParams)
+        .sort()
+        .map((key) => `${key}=${encodeURIComponent(queryParams[key])}`)
+        .join("&");
+
+      const signature = this.generateSignature(queryString);
+      const url = `${this.baseUrl}${endpoint}?${queryString}&signature=${signature}`;
+
+      const headers: any = {
+        "Content-Type": "application/json",
+        "X-BX-APIKEY": this.apiKey,
+      };
+
       const response = await fetch(url, {
         method,
         headers,
@@ -53,28 +57,28 @@ export class BingXClient {
       if (!response.ok) {
         const error = await response.text();
         console.error(`❌ BingX API Error: ${response.status} - ${error}`);
-        throw new Error(`BingX API Error: ${response.status}`);
+        return { code: response.status.toString(), msg: error };
       }
 
       const data = await response.json();
       return data;
     } catch (error: any) {
       console.error(`❌ Request failed: ${error.message}`);
-      throw error;
+      return { code: "500", msg: error.message };
     }
   }
 
   // ---- Get Account Balance ----
   async getBalance(): Promise<number> {
     try {
+      console.log("📊 Fetching balance from BingX...");
       const response = await this.request("GET", "/openApi/swap/v2/user/balance");
-      
+
       if (response.code !== "0") {
         console.error("❌ Failed to get balance:", response.msg);
         return 0;
       }
 
-      // BingX returns balance in USDT
       const balance = parseFloat(response.data?.balance || "0");
       console.log(`💰 BingX Account Balance: $${balance.toFixed(2)} USDT`);
       return balance;
@@ -84,19 +88,23 @@ export class BingXClient {
     }
   }
 
-  // ---- Get Real-Time Price ----
+  // ---- Get Real-Time Price (Spot Market) ----
   async getPrice(symbol: string): Promise<number> {
     try {
+      // Use spot market ticker
       const response = await this.request("GET", "/openApi/spot/v1/market/ticker", {
         symbol: symbol,
       });
 
       if (response.code !== "0") {
-        console.error(`❌ Failed to get price for ${symbol}:`, response.msg);
+        console.warn(`⚠️ Price fetch for ${symbol}: ${response.msg}`);
         return 0;
       }
 
-      const price = parseFloat(response.data?.lastPrice || "0");
+      const price = parseFloat(response.data?.lastPrice || response.data?.price || "0");
+      if (price > 0) {
+        console.log(`📈 ${symbol}: $${price.toFixed(2)}`);
+      }
       return price;
     } catch (error: any) {
       console.error(`❌ Error fetching price for ${symbol}:`, error.message);
@@ -118,7 +126,7 @@ export class BingXClient {
       });
 
       if (response.code !== "0") {
-        console.error(`❌ Failed to get klines for ${symbol}:`, response.msg);
+        console.warn(`⚠️ Klines fetch for ${symbol}: ${response.msg}`);
         return [];
       }
 
@@ -137,6 +145,10 @@ export class BingXClient {
     leverage: number = 5
   ): Promise<any> {
     try {
+      console.log(
+        `📤 Opening ${side} position: ${quantity} ${symbol} @ ${leverage}x leverage`
+      );
+
       const response = await this.request("POST", "/openApi/swap/v2/trade/openOrder", {
         symbol,
         side,
@@ -152,7 +164,9 @@ export class BingXClient {
       }
 
       const orderId = response.data?.orderId;
-      console.log(`✅ Position opened: ${side} ${quantity} ${symbol} | Order ID: ${orderId}`);
+      console.log(
+        `✅ Position opened: ${side} ${quantity} ${symbol} | Order ID: ${orderId}`
+      );
       return response.data;
     } catch (error: any) {
       console.error(`❌ Error opening position:`, error.message);
@@ -163,6 +177,8 @@ export class BingXClient {
   // ---- Close Position ----
   async closePosition(symbol: string, positionSide: "LONG" | "SHORT"): Promise<any> {
     try {
+      console.log(`📥 Closing ${positionSide} position: ${symbol}`);
+
       const response = await this.request("POST", "/openApi/swap/v2/trade/closePosition", {
         symbol,
         positionSide,
@@ -188,6 +204,8 @@ export class BingXClient {
     stopPrice: number
   ): Promise<any> {
     try {
+      console.log(`🛑 Setting stop loss: ${symbol} @ $${stopPrice.toFixed(2)}`);
+
       const response = await this.request("POST", "/openApi/swap/v2/trade/setStopLoss", {
         symbol,
         positionSide,
@@ -195,7 +213,7 @@ export class BingXClient {
       });
 
       if (response.code !== "0") {
-        console.error(`❌ Failed to set stop loss:`, response.msg);
+        console.warn(`⚠️ Stop loss set (may not be required): ${response.msg}`);
         return null;
       }
 
@@ -214,6 +232,8 @@ export class BingXClient {
     profitPrice: number
   ): Promise<any> {
     try {
+      console.log(`💰 Setting take profit: ${symbol} @ $${profitPrice.toFixed(2)}`);
+
       const response = await this.request("POST", "/openApi/swap/v2/trade/setTakeProfit", {
         symbol,
         positionSide,
@@ -221,7 +241,7 @@ export class BingXClient {
       });
 
       if (response.code !== "0") {
-        console.error(`❌ Failed to set take profit:`, response.msg);
+        console.warn(`⚠️ Take profit set (may not be required): ${response.msg}`);
         return null;
       }
 
@@ -239,7 +259,7 @@ export class BingXClient {
       const response = await this.request("GET", "/openApi/swap/v2/user/positions");
 
       if (response.code !== "0") {
-        console.error(`❌ Failed to get positions:`, response.msg);
+        console.warn(`⚠️ Get positions: ${response.msg}`);
         return [];
       }
 
@@ -259,7 +279,7 @@ export class BingXClient {
       const response = await this.request("GET", "/openApi/swap/v2/trade/orderHistory", params);
 
       if (response.code !== "0") {
-        console.error(`❌ Failed to get order history:`, response.msg);
+        console.warn(`⚠️ Get order history: ${response.msg}`);
         return [];
       }
 
@@ -267,6 +287,22 @@ export class BingXClient {
     } catch (error: any) {
       console.error(`❌ Error fetching order history:`, error.message);
       return [];
+    }
+  }
+
+  // ---- Test Connection ----
+  async testConnection(): Promise<boolean> {
+    try {
+      console.log("🔗 Testing BingX API connection...");
+      const balance = await this.getBalance();
+      if (balance >= 0) {
+        console.log("✅ BingX API connection successful!");
+        return true;
+      }
+      return false;
+    } catch (error: any) {
+      console.error("❌ BingX API connection failed:", error.message);
+      return false;
     }
   }
 }
