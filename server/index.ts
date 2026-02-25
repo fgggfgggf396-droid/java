@@ -1,6 +1,6 @@
 // ============================================================================
-// 🚀 INSTITUTIONAL GUARD v3.0 — The Third Proposal Server
-// Dual-Core (BTC + ETH) | 24/7 Autonomous | Cross Margin | 10x
+// 🔥 SOVEREIGN X v20 ELITE PRO — Server
+// Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous
 // ============================================================================
 
 import express from "express";
@@ -47,7 +47,7 @@ async function startServer() {
     clientWs.send(JSON.stringify({ event: "stats", data: stats }));
 
     // Send current prices
-    for (const sym of ["BTC-USDT", "ETH-USDT"]) {
+    for (const sym of ["BTC-USDT", "ETH-USDT", "BNB-USDT", "SOL-USDT", "XRP-USDT", "ADA-USDT"]) {
       const price = engine.getPrice(sym);
       if (price > 0) {
         clientWs.send(JSON.stringify({ event: "price", data: { symbol: sym, price } }));
@@ -65,7 +65,7 @@ async function startServer() {
     res.json({
       success: true,
       status: stats.isRunning ? "running" : "stopped",
-      version: "v3.0 — The Third Proposal",
+      version: "v20 ELITE PRO",
       symbols: Object.keys(stats.symbols),
       prices: Object.fromEntries(
         Object.entries(stats.symbols).map(([k, v]) => [k, v.price])
@@ -107,8 +107,8 @@ async function startServer() {
     const stats = engine.getStats();
     const positions: any[] = [];
     for (const [, data] of Object.entries(stats.symbols)) {
-      if (data.position) {
-        positions.push(data.position);
+      if (data.positions) {
+        positions.push(...data.positions);
       }
     }
     res.json({ success: true, positions });
@@ -148,8 +148,8 @@ async function startServer() {
   // ---- Start Server ----
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`🚀 Institutional Guard v3.0 — The Third Proposal running on port ${port}`);
-    console.log(`🧠 Dual-Core (BTC + ETH) | 10x Cross Margin | 5% Risk`);
+    console.log(`🚀 SOVEREIGN X v20 ELITE PRO running on port ${port}`);
+    console.log(`🧠 Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous`);
     console.log(`📡 WebSocket bridge active for browser clients`);
   });
 
