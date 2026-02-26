@@ -5,7 +5,7 @@ import fetch from "node-fetch";
 // ============================================================================
 
 export class BinancePriceFetcher {
-  private baseUrl = "https://binance.com/fapi/v1";
+  private baseUrl = "https://fapi.binance.com/fapi/v1";
 
   async getPrice(symbol: string): Promise<number> {
     try {
