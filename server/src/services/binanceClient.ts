@@ -8,7 +8,8 @@ import fetch from "node-fetch";
 export class BinanceClient {
   private apiKey: string;
   private apiSecret: string;
-  private baseUrl = "https://api.binance.com";
+  private spotBaseUrl = "https://api.binance.com";
+  private futuresBaseUrl = "https://fapi.binance.com";
   private recvWindow = 5000;
 
   constructor(apiKey: string, apiSecret: string) {
@@ -30,11 +31,15 @@ export class BinanceClient {
     signed: boolean = true
   ): Promise<any> {
     try {
+      // Route futures endpoints to fapi.binance.com
+      const isFutures = endpoint.startsWith("/fapi/");
+      const baseUrl = isFutures ? this.futuresBaseUrl : this.spotBaseUrl;
+
       const timestamp = Date.now();
       const queryParams = { ...params, timestamp, recvWindow: this.recvWindow };
 
       let queryString = new URLSearchParams(queryParams).toString();
-      let url = `${this.baseUrl}${endpoint}`;
+      let url = `${baseUrl}${endpoint}`;
 
       if (signed) {
         const signature = this.generateSignature(queryString);
@@ -64,18 +69,18 @@ export class BinanceClient {
     }
   }
 
-  // Get account balance
+  // Get futures account balance
   async getBalance(): Promise<any> {
     try {
-      const data = await this.request("GET", "/api/v3/account", {}, true);
+      const data = await this.request("GET", "/fapi/v2/balance", {}, true);
       const balances: any = {};
 
-      for (const balance of data.balances) {
-        if (parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0) {
+      for (const balance of data) {
+        if (parseFloat(balance.balance) > 0 || parseFloat(balance.availableBalance) > 0) {
           balances[balance.asset] = {
-            free: parseFloat(balance.free),
-            locked: parseFloat(balance.locked),
-            total: parseFloat(balance.free) + parseFloat(balance.locked),
+            free: parseFloat(balance.availableBalance),
+            locked: parseFloat(balance.balance) - parseFloat(balance.availableBalance),
+            total: parseFloat(balance.balance),
           };
         }
       }
@@ -161,7 +166,6 @@ export class BinanceClient {
           side,
           type: "MARKET",
           quantity: quantity.toFixed(4),
-          timeInForce: "GTC",
         },
         true
       );
@@ -261,7 +265,6 @@ export class BinanceClient {
           side: closeSide,
           type: "MARKET",
           closePosition: true,
-          timeInForce: "GTC",
         },
         true
       );
@@ -281,20 +284,21 @@ export class BinanceClient {
     try {
       const data = await this.request(
         "GET",
-        "/fapi/v2/openOrders",
+        "/fapi/v2/positionRisk",
         {},
         true
       );
 
-      return data.map((order: any) => ({
-        symbol: order.symbol,
-        orderId: order.orderId,
-        side: order.side,
-        type: order.type,
-        quantity: parseFloat(order.origQty),
-        price: parseFloat(order.price),
-        status: order.status,
-      }));
+      return data
+        .filter((pos: any) => parseFloat(pos.positionAmt) !== 0)
+        .map((pos: any) => ({
+          symbol: pos.symbol,
+          side: parseFloat(pos.positionAmt) > 0 ? "LONG" : "SHORT",
+          quantity: Math.abs(parseFloat(pos.positionAmt)),
+          entryPrice: parseFloat(pos.entryPrice),
+          unrealizedProfit: parseFloat(pos.unRealizedProfit),
+          leverage: parseFloat(pos.leverage),
+        }));
     } catch (error: any) {
       console.error(`Error getting open positions: ${error.message}`);
       return [];

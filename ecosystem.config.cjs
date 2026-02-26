@@ -29,6 +29,9 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         PORT: 3000,
+        BINANCE_API_KEY: process.env.BINANCE_API_KEY || "",
+        BINANCE_API_SECRET: process.env.BINANCE_API_SECRET || "",
+        BINANCE_TESTNET: process.env.BINANCE_TESTNET || "false",
       },
 
       // ---- Node.js flags ----
