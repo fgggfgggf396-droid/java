@@ -18,7 +18,7 @@ const __dirname = path.dirname(__filename);
 // ============================================================================
 
 const API_KEY = process.env.BINANCE_API_KEY || "rKApgjXcm5xYfFAotrHRe0GpX4KjAjOVJ09efnYiat3pBZhxF0tAkRqBXravWziU";
-const API_SECRET = process.env.BINANCE_API_SECRET || "npHi0kZuuQHsStFkRFQ4PFnVfxG6EcfekqgbgSxlqSowQAvcei8lrGHo0lhvlVT";
+const API_SECRET = process.env.BINANCE_API_SECRET || "npHj0kZuuQHsStFkRFQ4PFnVfxG6EcfekkqgbgSxlqSowQAvcel8lrGHo0lhvlvT";
 const USE_TESTNET = process.env.BINANCE_TESTNET === "true" ? true : false;
 
 console.log("🔐 Binance Futures API Configuration:");
