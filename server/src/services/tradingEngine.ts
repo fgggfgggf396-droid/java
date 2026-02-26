@@ -143,7 +143,7 @@ export class TradingEngine extends EventEmitter {
       } catch (error: any) {
         this.log(`❌ Update loop error: ${error.message}`);
       }
-    }, 5000);
+    }, 10000);
   }
 
   private calculateIndicatorsFast(symbol: string) {
