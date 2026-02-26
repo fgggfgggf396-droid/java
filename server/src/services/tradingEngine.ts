@@ -81,11 +81,17 @@ export class TradingEngine extends EventEmitter {
     try {
       const balances = await this.binanceClient.getBalance();
       const usdtBalance = balances["USDT"]?.free || 0;
-      this.balance = usdtBalance;
-      this.log(`💰 Account Balance: $${this.balance.toFixed(2)} USDT`);
+      if (usdtBalance > 0) {
+        this.balance = usdtBalance;
+        this.log(`💰 Account Balance: $${this.balance.toFixed(2)} USDT (from Binance)`);
+      } else {
+        this.balance = 150; // Default starting balance
+        this.log(`💰 Starting Balance: $${this.balance.toFixed(2)} USDT (default - will sync with Binance)`);
+      }
     } catch (error: any) {
-      this.log(`⚠️ Could not fetch initial balance: ${error.message}`);
-      this.log(`💰 Starting with tracked balance`);
+      this.balance = 150; // Default starting balance on error
+      this.log(`⚠️ Could not fetch balance: ${error.message}`);
+      this.log(`💰 Starting Balance: $${this.balance.toFixed(2)} USDT (default - will sync with Binance)`);
     }
 
     this.log("🎯 Mode: AGGRESSIVE - Original v20 + WebSocket Real-Time Data");
