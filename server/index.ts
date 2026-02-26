@@ -1,5 +1,6 @@
 // ============================================================================
-// 🔥 SOVEREIGN X v20 ELITE PRO — Server with Live Trading
+// 🔥 SOVEREIGN X v26 ELITE PRO — WebSocket Edition
+// Ultra-Fast Millisecond Data via Binance Futures WebSocket
 // Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous
 // ============================================================================
 
@@ -171,22 +172,17 @@ async function startServer() {
   // ---- Start Server ----
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`🚀 SOVEREIGN X v25 ELITE PRO (Binance Edition) running on port ${port}`);
+    console.log(`🚀 SOVEREIGN X v26 ELITE PRO (WebSocket Edition) running on port ${port}`);
+    console.log(`📡 Price Data: Binance Futures WebSocket (Millisecond Updates)`);
     console.log(`🧠 Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous`);
     console.log(`📡 WebSocket bridge active for browser clients`);
     console.log(`🔗 Connected to Binance Futures Live Trading API`);
     console.log(`🔒 API Keys: Configured and Ready`);
   });
 
-  // ---- Auto-start engine on server boot (24/7 autonomous) ----
-  try {
-    await engine.start();
-    console.log("✅ Engine auto-started successfully — running 24/7");
-    console.log("🤖 Trading Bot is now LIVE on Binance and trading!");
-  } catch (e: any) {
-    console.error("⚠️ Engine auto-start failed:", e.message);
-    console.log("Engine can be started manually via POST /api/engine/start");
-  }
+  // Engine already started above - no duplicate start needed
+  console.log("✅ Engine running 24/7 with WebSocket price feed");
+  console.log("🤖 Trading Bot is now LIVE on Binance Futures!");
 
   // ---- Graceful shutdown ----
   const shutdown = async () => {

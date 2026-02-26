@@ -3,8 +3,9 @@ import { BinanceClient } from "./binanceClient.js";
 import { BinancePriceFetcher } from "./binancePriceFetcher.js";
 
 // ============================================================================
-// 🧠 SOVEREIGN X Trading Engine v25 - BINANCE LIVE TRADING
-// Original v20 algorithm + Binance Real Trading
+// 🧠 SOVEREIGN X Trading Engine v26 - BINANCE LIVE TRADING (WebSocket Edition)
+// Ultra-fast millisecond response via Binance Futures WebSocket streams
+// NO REST API polling for prices = NO rate limits = NO IP bans
 // ============================================================================
 
 export class TradingEngine extends EventEmitter {
@@ -16,12 +17,22 @@ export class TradingEngine extends EventEmitter {
   private losingTrades = 0;
   private symbols: any = {};
   private logs: string[] = [];
-  private updateInterval: any = null;
   private responseTimes: number[] = [];
   private lastUpdateTime = Date.now();
   private updateCount = 0;
   private binanceClient: BinanceClient;
   private binanceFetcher: BinancePriceFetcher;
+  private analysisInterval: any = null;
+  private balanceInterval: any = null;
+
+  private readonly SYMBOL_LIST = [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "XRPUSDT",
+    "ADAUSDT",
+  ];
 
   constructor(apiKey: string, apiSecret: string) {
     super();
@@ -31,15 +42,7 @@ export class TradingEngine extends EventEmitter {
   }
 
   private initializeSymbols() {
-    const symbols = [
-      "BTCUSDT",
-      "ETHUSDT",
-      "BNBUSDT",
-      "SOLUSDT",
-      "XRPUSDT",
-      "ADAUSDT",
-    ];
-    for (const symbol of symbols) {
+    for (const symbol of this.SYMBOL_LIST) {
       this.symbols[symbol] = {
         symbol,
         price: 0,
@@ -51,6 +54,7 @@ export class TradingEngine extends EventEmitter {
         positions: [],
         priceHistory: [],
         updateCount: 0,
+        wsLatency: 0,
       };
     }
   }
@@ -68,58 +72,85 @@ export class TradingEngine extends EventEmitter {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    this.log("🚀 SOVEREIGN X v25 BINANCE LIVE TRADING started!");
-    this.log("📊 Price Source: Binance (Real-Time)");
+    this.log("🚀 SOVEREIGN X v26 BINANCE LIVE TRADING started! (WebSocket Edition)");
+    this.log("📡 Price Source: Binance Futures WebSocket (Millisecond Updates)");
     this.log("💱 Trading Platform: Binance Futures (Live Orders)");
+    this.log("⚡ NO REST API polling = NO rate limits = NO IP bans");
 
-    // Get initial balance
-    const balances = await this.binanceClient.getBalance();
-    const usdtBalance = balances["USDT"]?.free || 0;
-    this.balance = usdtBalance;
-    this.log(`🔗 Account Balance: $${this.balance.toFixed(2)} USDT`);
-    this.log("🎯 Mode: AGGRESSIVE - Original v20 + Binance Real Trading");
+    // Get initial balance via REST (one-time call)
+    try {
+      const balances = await this.binanceClient.getBalance();
+      const usdtBalance = balances["USDT"]?.free || 0;
+      this.balance = usdtBalance;
+      this.log(`💰 Account Balance: $${this.balance.toFixed(2)} USDT`);
+    } catch (error: any) {
+      this.log(`⚠️ Could not fetch initial balance: ${error.message}`);
+      this.log(`💰 Starting with tracked balance`);
+    }
 
-    // Fetch initial prices
-    await this.fetchRealPrices();
+    this.log("🎯 Mode: AGGRESSIVE - Original v20 + WebSocket Real-Time Data");
 
-    this.startFastUpdateLoop();
+    // Connect to WebSocket for real-time prices
+    this.startWebSocketPriceFeed();
+
+    // Start periodic analysis loop (every 3 seconds - only for indicators & trade management)
+    this.startAnalysisLoop();
+
+    // Start periodic balance refresh (every 60 seconds - minimal REST calls)
+    this.startBalanceRefresh();
   }
 
   async stop() {
     this.isRunning = false;
-    if (this.updateInterval) clearInterval(this.updateInterval);
+    this.binanceFetcher.disconnect();
+    if (this.analysisInterval) clearInterval(this.analysisInterval);
+    if (this.balanceInterval) clearInterval(this.balanceInterval);
     this.log("🛑 SOVEREIGN X stopped");
   }
 
-  private async fetchRealPrices() {
-    const symbols = Object.keys(this.symbols);
+  // ============================================================================
+  // 📡 WebSocket Price Feed - Millisecond-level price updates
+  // ============================================================================
+  private startWebSocketPriceFeed() {
+    // Listen for real-time price updates from WebSocket
+    this.binanceFetcher.on("priceUpdate", (data: any) => {
+      const { symbol, price, latency } = data;
 
-    for (const symbol of symbols) {
-      try {
-        const price = await this.binanceClient.getPrice(symbol);
-        if (price > 0) {
-          this.symbols[symbol].price = price;
-          this.symbols[symbol].priceHistory.push(price);
-          if (this.symbols[symbol].priceHistory.length > 100) {
-            this.symbols[symbol].priceHistory.shift();
-          }
+      if (this.symbols[symbol]) {
+        this.symbols[symbol].price = price;
+        this.symbols[symbol].lastUpdateTime = Date.now();
+        this.symbols[symbol].wsLatency = latency;
+        this.symbols[symbol].updateCount++;
+
+        // Add to price history for indicator calculations
+        this.symbols[symbol].priceHistory.push(price);
+        if (this.symbols[symbol].priceHistory.length > 200) {
+          this.symbols[symbol].priceHistory.shift();
         }
-      } catch (error: any) {
-        this.log(`⚠️ Error fetching price for ${symbol}: ${error.message}`);
       }
-    }
+    });
+
+    this.binanceFetcher.on("connected", () => {
+      this.log("✅ WebSocket price feed connected! Receiving real-time data.");
+    });
+
+    // Connect to all symbols
+    this.binanceFetcher.connect(this.SYMBOL_LIST);
+    this.log(`🔌 WebSocket connecting to ${this.SYMBOL_LIST.length} symbol streams...`);
   }
 
-  private startFastUpdateLoop() {
-    this.updateInterval = setInterval(async () => {
+  // ============================================================================
+  // 🧠 Analysis Loop - Runs every 3 seconds for indicator calculation & trading
+  // Only uses cached WebSocket prices, NO REST API calls for prices
+  // ============================================================================
+  private startAnalysisLoop() {
+    this.analysisInterval = setInterval(async () => {
       if (!this.isRunning) return;
 
       const startTime = Date.now();
 
       try {
-        await this.fetchRealPrices();
-
-        for (const symbol of Object.keys(this.symbols)) {
+        for (const symbol of this.SYMBOL_LIST) {
           this.calculateIndicatorsFast(symbol);
           this.analyzeSymbolFast(symbol);
           await this.managePositionsFast(symbol);
@@ -134,18 +165,57 @@ export class TradingEngine extends EventEmitter {
         this.updateCount++;
         this.emit("stats", this.getStats());
 
+        // Log performance every 100 cycles
         if (this.updateCount % 100 === 0) {
           const avgTime =
             this.responseTimes.reduce((a: number, b: number) => a + b, 0) /
             this.responseTimes.length;
-          this.log(`⚡ Performance: ${avgTime.toFixed(2)}ms avg response time`);
+
+          // Calculate average WebSocket latency
+          let totalWsLatency = 0;
+          let wsCount = 0;
+          for (const sym of this.SYMBOL_LIST) {
+            if (this.symbols[sym].wsLatency > 0) {
+              totalWsLatency += this.symbols[sym].wsLatency;
+              wsCount++;
+            }
+          }
+          const avgWsLatency = wsCount > 0 ? totalWsLatency / wsCount : 0;
+
+          this.log(
+            `⚡ Performance: Analysis ${avgTime.toFixed(1)}ms | ` +
+            `WebSocket Latency ${avgWsLatency.toFixed(0)}ms | ` +
+            `WS Connected: ${this.binanceFetcher.getConnectionStatus() ? "YES" : "NO"} | ` +
+            `Balance: $${this.balance.toFixed(2)}`
+          );
         }
       } catch (error: any) {
-        this.log(`❌ Update loop error: ${error.message}`);
+        this.log(`❌ Analysis loop error: ${error.message}`);
       }
-    }, 10000);
+    }, 3000); // Analysis every 3 seconds using cached WebSocket prices
   }
 
+  // ============================================================================
+  // 💰 Balance Refresh - Minimal REST API calls (every 60 seconds)
+  // ============================================================================
+  private startBalanceRefresh() {
+    this.balanceInterval = setInterval(async () => {
+      if (!this.isRunning) return;
+      try {
+        const balances = await this.binanceClient.getBalance();
+        const usdtBalance = balances["USDT"]?.free || 0;
+        if (usdtBalance > 0) {
+          this.balance = usdtBalance;
+        }
+      } catch (error: any) {
+        // Silently handle - balance will be updated from trade results
+      }
+    }, 60000); // Only every 60 seconds
+  }
+
+  // ============================================================================
+  // 📊 Technical Indicators
+  // ============================================================================
   private calculateIndicatorsFast(symbol: string) {
     const data = this.symbols[symbol];
     const prices = data.priceHistory;
@@ -192,15 +262,18 @@ export class TradingEngine extends EventEmitter {
     return tr / (prices.length - 1);
   }
 
+  // ============================================================================
+  // 🧠 Signal Analysis - The 7 Minds (Trading Strategies)
+  // ============================================================================
   private analyzeSymbolFast(symbol: string) {
     const data = this.symbols[symbol];
     if (!data.price || data.price === 0) return;
-    if (data.positions.some((p: any) => p.status === "open")) return;
+    if (data.positions.some((p: any) => p.status === "open" || p.status === "partial")) return;
 
     const emaDiff = Math.abs(data.ema12 - data.ema26);
     const emaPercent = (emaDiff / data.ema26) * 100;
 
-    // ORIGINAL SIGNALS (v20 ELITE PRO)
+    // 🧠 MIND 1: EMA Crossover LONG (Strong Bullish Trend)
     if (
       data.ema12 > data.ema26 &&
       data.rsi > 50 &&
@@ -212,6 +285,7 @@ export class TradingEngine extends EventEmitter {
       return;
     }
 
+    // 🧠 MIND 2: EMA Crossover SHORT (Strong Bearish Trend)
     if (
       data.ema12 < data.ema26 &&
       data.rsi < 50 &&
@@ -223,7 +297,7 @@ export class TradingEngine extends EventEmitter {
       return;
     }
 
-    // AGGRESSIVE SIGNALS
+    // 🧠 MIND 3: Aggressive LONG (Moderate Bullish Momentum)
     if (
       data.ema12 > data.ema26 &&
       data.rsi > 45 &&
@@ -231,13 +305,12 @@ export class TradingEngine extends EventEmitter {
       emaPercent > 0.3
     ) {
       const confidence = Math.min(100, 40 + (data.rsi - 45) + emaPercent * 8);
-      this.log(
-        `📊 ${symbol}: Aggressive LONG signal (EMA trend + RSI momentum)`
-      );
+      this.log(`📊 ${symbol}: 🧠 Mind 3 - Aggressive LONG (EMA trend + RSI momentum)`);
       this.openPositionFast(symbol, "long", confidence);
       return;
     }
 
+    // 🧠 MIND 4: Aggressive SHORT (Moderate Bearish Momentum)
     if (
       data.ema12 < data.ema26 &&
       data.rsi < 55 &&
@@ -245,37 +318,46 @@ export class TradingEngine extends EventEmitter {
       emaPercent > 0.3
     ) {
       const confidence = Math.min(100, 40 + (55 - data.rsi) + emaPercent * 8);
-      this.log(
-        `📊 ${symbol}: Aggressive SHORT signal (EMA trend + RSI momentum)`
-      );
+      this.log(`📊 ${symbol}: 🧠 Mind 4 - Aggressive SHORT (EMA trend + RSI momentum)`);
       this.openPositionFast(symbol, "short", confidence);
       return;
     }
 
+    // 🧠 MIND 5: Oversold Bounce LONG (RSI Recovery)
     if (data.rsi < 35 && data.ema12 > data.ema26 * 0.99) {
       const confidence = Math.min(100, 35 + (35 - data.rsi));
-      this.log(`📊 ${symbol}: Oversold LONG signal (RSI bounce opportunity)`);
+      this.log(`📊 ${symbol}: 🧠 Mind 5 - Oversold LONG (RSI bounce opportunity)`);
       this.openPositionFast(symbol, "long", confidence);
       return;
     }
 
+    // 🧠 MIND 6: Overbought Pullback SHORT (RSI Reversal)
     if (data.rsi > 65 && data.ema12 < data.ema26 * 1.01) {
       const confidence = Math.min(100, 35 + (data.rsi - 65));
-      this.log(
-        `📊 ${symbol}: Overbought SHORT signal (RSI pullback opportunity)`
-      );
+      this.log(`📊 ${symbol}: 🧠 Mind 6 - Overbought SHORT (RSI pullback opportunity)`);
       this.openPositionFast(symbol, "short", confidence);
       return;
     }
+
+    // 🧠 MIND 7: Trailing Profit & Dynamic Risk Management
+    // (Implemented in managePositionsFast - trailing stop loss & partial take profits)
   }
 
+  // ============================================================================
+  // 💼 Position Management
+  // ============================================================================
   private async openPositionFast(symbol: string, side: string, confidence: number) {
     const data = this.symbols[symbol];
     const entryPrice = data.price;
     const leverage = 5 + (confidence / 100) * 5;
     // 🧠 REALISTIC RISK MANAGEMENT: 5% of current available balance
-    // This allows the position size to grow as profits increase
     const riskAmount = this.balance * 0.05;
+
+    if (riskAmount < 1) {
+      this.log(`⚠️ ${symbol}: Insufficient balance for trade (balance: $${this.balance.toFixed(2)})`);
+      return;
+    }
+
     const quantity = (riskAmount * leverage) / entryPrice;
 
     const stopLossPercent = 0.025;
@@ -327,7 +409,7 @@ export class TradingEngine extends EventEmitter {
       profit: 0,
       profitPercent: 0,
       trailingStopLoss: stopLoss,
-      partialClosedAt: [],
+      partialClosedAt: [] as number[],
       orderId: orderResult?.orderId || `ORD-${Date.now()}`,
     };
 
@@ -336,7 +418,8 @@ export class TradingEngine extends EventEmitter {
 
     this.log(
       `⚡ OPEN ${side.toUpperCase()} on ${symbol} | Entry: $${entryPrice.toFixed(2)} | ` +
-        `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}%`
+        `Leverage: ${leverage.toFixed(1)}x | Confidence: ${confidence.toFixed(0)}% | ` +
+        `Margin: $${riskAmount.toFixed(2)} (5% of $${this.balance.toFixed(2)})`
     );
 
     this.emit("position", position);
@@ -357,15 +440,37 @@ export class TradingEngine extends EventEmitter {
       position.profit = position.quantity * priceDiff;
       position.profitPercent = (priceDiff / position.entryPrice) * 100;
 
-      // Check stop loss
-      if (position.side === "long" && currentPrice <= position.stopLoss) {
-        await this.closePositionFast(position, currentPrice, "Stop Loss");
+      // 🧠 MIND 7: Trailing Stop Loss (Dynamic Risk Management)
+      // Move stop loss to break-even after TP1, then trail it
+      if (position.status === "partial" && priceDiff > 0) {
+        const newTrailingStop =
+          position.side === "long"
+            ? currentPrice * (1 - 0.015) // Trail 1.5% below current price
+            : currentPrice * (1 + 0.015); // Trail 1.5% above current price
+
+        if (position.side === "long" && newTrailingStop > position.trailingStopLoss) {
+          position.trailingStopLoss = newTrailingStop;
+        }
+        if (position.side === "short" && newTrailingStop < position.trailingStopLoss) {
+          position.trailingStopLoss = newTrailingStop;
+        }
+      }
+
+      // Check stop loss (use trailing stop if available)
+      const effectiveStopLoss = position.status === "partial" 
+        ? position.trailingStopLoss 
+        : position.stopLoss;
+
+      if (position.side === "long" && currentPrice <= effectiveStopLoss) {
+        await this.closePositionFast(position, currentPrice, 
+          position.status === "partial" ? "Trailing Stop" : "Stop Loss");
         this.losingTrades++;
         continue;
       }
 
-      if (position.side === "short" && currentPrice >= position.stopLoss) {
-        await this.closePositionFast(position, currentPrice, "Stop Loss");
+      if (position.side === "short" && currentPrice >= effectiveStopLoss) {
+        await this.closePositionFast(position, currentPrice,
+          position.status === "partial" ? "Trailing Stop" : "Stop Loss");
         this.losingTrades++;
         continue;
       }
@@ -378,9 +483,9 @@ export class TradingEngine extends EventEmitter {
           this.balance += profit1;
           this.totalProfit += profit1;
           position.status = "partial";
-          position.trailingStopLoss = position.entryPrice;
+          position.trailingStopLoss = position.entryPrice; // Move SL to break-even
           position.partialClosedAt.push(Date.now());
-          this.log(`✅ TP1 HIT on ${symbol} | Profit: $${profit1.toFixed(2)}`);
+          this.log(`✅ TP1 HIT on ${symbol} | Profit: $${profit1.toFixed(2)} | SL moved to break-even`);
         }
 
         if (position.side === "short" && currentPrice <= position.takeProfit1) {
@@ -391,12 +496,13 @@ export class TradingEngine extends EventEmitter {
           position.status = "partial";
           position.trailingStopLoss = position.entryPrice;
           position.partialClosedAt.push(Date.now());
-          this.log(`✅ TP1 HIT on ${symbol} | Profit: $${profit1.toFixed(2)}`);
+          this.log(`✅ TP1 HIT on ${symbol} | Profit: $${profit1.toFixed(2)} | SL moved to break-even`);
         }
       }
 
       if (position.status === "partial") {
-        if (position.side === "long" && currentPrice >= position.takeProfit2) {
+        if (position.side === "long" && currentPrice >= position.takeProfit2 &&
+            position.partialClosedAt.length < 2) {
           const profit2 =
             (position.quantity * 0.3) * (position.takeProfit2 - position.entryPrice);
           this.balance += profit2;
@@ -405,7 +511,8 @@ export class TradingEngine extends EventEmitter {
           this.log(`✅ TP2 HIT on ${symbol} | Profit: $${profit2.toFixed(2)}`);
         }
 
-        if (position.side === "short" && currentPrice <= position.takeProfit2) {
+        if (position.side === "short" && currentPrice <= position.takeProfit2 &&
+            position.partialClosedAt.length < 2) {
           const profit2 =
             (position.quantity * 0.3) * (position.entryPrice - position.takeProfit2);
           this.balance += profit2;
@@ -420,8 +527,8 @@ export class TradingEngine extends EventEmitter {
           this.balance += profit3;
           this.totalProfit += profit3;
           this.winningTrades++;
-          await this.closePositionFast(position, currentPrice, "TP3");
-          this.log(`✅ TP3 HIT on ${symbol} | Profit: $${profit3.toFixed(2)}`);
+          await this.closePositionFast(position, currentPrice, "TP3 (Full Target)");
+          this.log(`✅ TP3 HIT on ${symbol} | Profit: $${profit3.toFixed(2)} | FULL WIN!`);
         }
 
         if (position.side === "short" && currentPrice <= position.takeProfit3) {
@@ -430,8 +537,8 @@ export class TradingEngine extends EventEmitter {
           this.balance += profit3;
           this.totalProfit += profit3;
           this.winningTrades++;
-          await this.closePositionFast(position, currentPrice, "TP3");
-          this.log(`✅ TP3 HIT on ${symbol} | Profit: $${profit3.toFixed(2)}`);
+          await this.closePositionFast(position, currentPrice, "TP3 (Full Target)");
+          this.log(`✅ TP3 HIT on ${symbol} | Profit: $${profit3.toFixed(2)} | FULL WIN!`);
         }
       }
     }
@@ -457,10 +564,13 @@ export class TradingEngine extends EventEmitter {
 
     this.log(
       `🔴 CLOSE ${position.side.toUpperCase()} on ${position.symbol} | ` +
-        `Reason: ${reason} | Profit: $${profit.toFixed(2)}`
+        `Reason: ${reason} | Profit: $${profit.toFixed(2)} | Balance: $${this.balance.toFixed(2)}`
     );
   }
 
+  // ============================================================================
+  // 📊 Stats & API
+  // ============================================================================
   getStats() {
     const winRate =
       this.totalTrades > 0 ? (this.winningTrades / this.totalTrades) * 100 : 0;
@@ -482,6 +592,7 @@ export class TradingEngine extends EventEmitter {
       logs: this.logs,
       avgResponseTime,
       lastUpdateTime: this.lastUpdateTime,
+      wsConnected: this.binanceFetcher.getConnectionStatus(),
     };
   }
 
