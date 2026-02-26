@@ -273,8 +273,10 @@ export class TradingEngine extends EventEmitter {
     const data = this.symbols[symbol];
     const entryPrice = data.price;
     const leverage = 5 + (confidence / 100) * 5;
+    // 🧠 REALISTIC RISK MANAGEMENT: 5% of current available balance
+    // This allows the position size to grow as profits increase
     const riskAmount = this.balance * 0.05;
-    const quantity = riskAmount / entryPrice;
+    const quantity = (riskAmount * leverage) / entryPrice;
 
     const stopLossPercent = 0.025;
     const stopLoss =
