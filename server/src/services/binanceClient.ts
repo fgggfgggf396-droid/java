@@ -8,7 +8,7 @@ import fetch from "node-fetch";
 export class BinanceClient {
   private apiKey: string;
   private apiSecret: string;
-  private baseUrl = "https://fapi.binance.com";
+  private baseUrl = "https://binance.com";
   private recvWindow = 5000;
 
   constructor(apiKey: string, apiSecret: string) {
