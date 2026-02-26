@@ -67,15 +67,15 @@ export class BinanceClient {
   // Get account balance
   async getBalance(): Promise<any> {
     try {
-      const data = await this.request("GET", "/api/v3/account", {}, true);
+      const data = await this.request("GET", "/fapi/v2/account", {}, true);
       const balances: any = {};
 
-      for (const balance of data.balances) {
-        if (parseFloat(balance.free) > 0 || parseFloat(balance.locked) > 0) {
-          balances[balance.asset] = {
-            free: parseFloat(balance.free),
-            locked: parseFloat(balance.locked),
-            total: parseFloat(balance.free) + parseFloat(balance.locked),
+      for (const asset of data.assets) {
+        if (parseFloat(asset.walletBalance) > 0) {
+          balances[asset.asset] = {
+            free: parseFloat(asset.availableBalance),
+            locked: parseFloat(asset.walletBalance) - parseFloat(asset.availableBalance),
+            total: parseFloat(asset.walletBalance),
           };
         }
       }
@@ -92,7 +92,7 @@ export class BinanceClient {
     try {
       const data = await this.request(
         "GET",
-        "/api/v3/ticker/price",
+        "/fapi/v1/ticker/price",
         { symbol },
         false
       );
@@ -112,7 +112,7 @@ export class BinanceClient {
     try {
       const data = await this.request(
         "GET",
-        "/api/v3/klines",
+        "/fapi/v1/klines",
         { symbol, interval, limit },
         false
       );
