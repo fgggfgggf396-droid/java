@@ -171,11 +171,10 @@ async function startServer() {
   // ---- Start Server ----
   const port = process.env.PORT || 3000;
   server.listen(port, () => {
-    console.log(`🚀 SOVEREIGN X v20 ELITE PRO (BingX Edition) running on port ${port}`);
+    console.log(`🚀 SOVEREIGN X v25 ELITE PRO (Binance Edition) running on port ${port}`);
     console.log(`🧠 Dynamic Leverage (5x-10x) | Trailing Profit System | 24/7 Autonomous`);
     console.log(`📡 WebSocket bridge active for browser clients`);
-    console.log(`💰 Account Balance: $173 USD`);
-    console.log(`🔗 Connected to BingX Live Trading API`);
+    console.log(`🔗 Connected to Binance Futures Live Trading API`);
     console.log(`🔒 API Keys: Configured and Ready`);
   });
 
@@ -183,8 +182,7 @@ async function startServer() {
   try {
     await engine.start();
     console.log("✅ Engine auto-started successfully — running 24/7");
-    console.log("🤖 Trading Bot is now LIVE on BingX and trading!");
-    console.log("💰 Account: $173 USD | Leverage: 5x-10x Dynamic | Risk: 5% per trade");
+    console.log("🤖 Trading Bot is now LIVE on Binance and trading!");
   } catch (e: any) {
     console.error("⚠️ Engine auto-start failed:", e.message);
     console.log("Engine can be started manually via POST /api/engine/start");
