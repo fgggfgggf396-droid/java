@@ -2,14 +2,14 @@ import crypto from "crypto";
 import fetch from "node-fetch";
 
 // ============================================================================
-// 🔗 Binance API Client - Real Trading Integration
+// 🔗 Binance API Client - Real Trading Integration (Optimized for Futures)
 // ============================================================================
 
 export class BinanceClient {
   private apiKey: string;
   private apiSecret: string;
   private baseUrl = "https://fapi.binance.com";
-  private recvWindow = 5000;
+  private recvWindow = 10000; // Increased recvWindow for network stability
 
   constructor(apiKey: string, apiSecret: string) {
     this.apiKey = apiKey;
@@ -31,17 +31,27 @@ export class BinanceClient {
   ): Promise<any> {
     try {
       const timestamp = Date.now();
-      const queryParams = { ...params, timestamp, recvWindow: this.recvWindow };
+      const queryParams = { ...params };
+      
+      if (signed) {
+        queryParams.timestamp = timestamp;
+        queryParams.recvWindow = this.recvWindow;
+      }
 
-      let queryString = new URLSearchParams(queryParams).toString();
-      let url = `${this.baseUrl}${endpoint}`;
+      // 1. Build query string
+      let queryString = Object.entries(queryParams)
+        .filter(([_, v]) => v !== undefined && v !== null)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("&");
 
+      // 2. Add signature if needed
       if (signed) {
         const signature = this.generateSignature(queryString);
         queryString += `&signature=${signature}`;
       }
 
-      url += `?${queryString}`;
+      // 3. Final URL
+      const url = `${this.baseUrl}${endpoint}${queryString ? "?" + queryString : ""}`;
 
       const response = await fetch(url, {
         method,
@@ -59,7 +69,7 @@ export class BinanceClient {
 
       return data;
     } catch (error: any) {
-      console.error(`Binance Request Error: ${error.message}`);
+      console.error(`Binance Request Error [${method} ${endpoint}]: ${error.message}`);
       throw error;
     }
   }
@@ -70,13 +80,15 @@ export class BinanceClient {
       const data = await this.request("GET", "/fapi/v2/account", {}, true);
       const balances: any = {};
 
-      for (const asset of data.assets) {
-        if (parseFloat(asset.walletBalance) > 0) {
-          balances[asset.asset] = {
-            free: parseFloat(asset.availableBalance),
-            locked: parseFloat(asset.walletBalance) - parseFloat(asset.availableBalance),
-            total: parseFloat(asset.walletBalance),
-          };
+      if (data && data.assets) {
+        for (const asset of data.assets) {
+          if (parseFloat(asset.walletBalance) > 0) {
+            balances[asset.asset] = {
+              free: parseFloat(asset.availableBalance),
+              locked: parseFloat(asset.walletBalance) - parseFloat(asset.availableBalance),
+              total: parseFloat(asset.walletBalance),
+            };
+          }
         }
       }
 
@@ -93,7 +105,7 @@ export class BinanceClient {
       const data = await this.request(
         "GET",
         "/fapi/v1/ticker/price",
-        { symbol },
+        { symbol: symbol.replace("-", "") },
         false
       );
       return parseFloat(data.price);
@@ -113,7 +125,7 @@ export class BinanceClient {
       const data = await this.request(
         "GET",
         "/fapi/v1/klines",
-        { symbol, interval, limit },
+        { symbol: symbol.replace("-", ""), interval, limit },
         false
       );
 
@@ -144,11 +156,13 @@ export class BinanceClient {
     leverage: number = 5
   ): Promise<any> {
     try {
+      const cleanSymbol = symbol.replace("-", "");
+      
       // Set leverage first
       await this.request(
         "POST",
         "/fapi/v1/leverage",
-        { symbol, leverage: Math.round(leverage) },
+        { symbol: cleanSymbol, leverage: Math.round(leverage) },
         true
       );
 
@@ -157,11 +171,10 @@ export class BinanceClient {
         "POST",
         "/fapi/v1/order",
         {
-          symbol,
+          symbol: cleanSymbol,
           side,
           type: "MARKET",
-          quantity: quantity.toFixed(4),
-          timeInForce: "GTC",
+          quantity: quantity.toFixed(3), // Standardize decimal precision
         },
         true
       );
@@ -175,7 +188,7 @@ export class BinanceClient {
         status: data.status,
       };
     } catch (error: any) {
-      console.error(`Error opening position: ${error.message}`);
+      console.error(`Error opening position for ${symbol}: ${error.message}`);
       return null;
     }
   }
@@ -187,16 +200,18 @@ export class BinanceClient {
     stopPrice: number
   ): Promise<any> {
     try {
+      const cleanSymbol = symbol.replace("-", "");
       const stopSide = side === "LONG" ? "SELL" : "BUY";
+      
       const data = await this.request(
         "POST",
         "/fapi/v1/order",
         {
-          symbol,
+          symbol: cleanSymbol,
           side: stopSide,
           type: "STOP_MARKET",
           stopPrice: stopPrice.toFixed(2),
-          closePosition: true,
+          closePosition: "true", // Required for Futures close-all stop loss
           timeInForce: "GTC",
         },
         true
@@ -208,7 +223,7 @@ export class BinanceClient {
         status: data.status,
       };
     } catch (error: any) {
-      console.error(`Error setting stop loss: ${error.message}`);
+      console.error(`Error setting stop loss for ${symbol}: ${error.message}`);
       return null;
     }
   }
@@ -221,9 +236,10 @@ export class BinanceClient {
     quantity?: number
   ): Promise<any> {
     try {
+      const cleanSymbol = symbol.replace("-", "");
       const tpSide = side === "LONG" ? "SELL" : "BUY";
       const params: any = {
-        symbol,
+        symbol: cleanSymbol,
         side: tpSide,
         type: "TAKE_PROFIT_MARKET",
         stopPrice: takePrice.toFixed(2),
@@ -231,9 +247,9 @@ export class BinanceClient {
       };
 
       if (quantity) {
-        params.quantity = quantity.toFixed(4);
+        params.quantity = quantity.toFixed(3);
       } else {
-        params.closePosition = true;
+        params.closePosition = "true";
       }
 
       const data = await this.request("POST", "/fapi/v1/order", params, true);
@@ -244,7 +260,7 @@ export class BinanceClient {
         status: data.status,
       };
     } catch (error: any) {
-      console.error(`Error setting take profit: ${error.message}`);
+      console.error(`Error setting take profit for ${symbol}: ${error.message}`);
       return null;
     }
   }
@@ -252,16 +268,16 @@ export class BinanceClient {
   // Close position
   async closePosition(symbol: string, side: "LONG" | "SHORT"): Promise<any> {
     try {
+      const cleanSymbol = symbol.replace("-", "");
       const closeSide = side === "LONG" ? "SELL" : "BUY";
       const data = await this.request(
         "POST",
         "/fapi/v1/order",
         {
-          symbol,
+          symbol: cleanSymbol,
           side: closeSide,
           type: "MARKET",
-          closePosition: true,
-          timeInForce: "GTC",
+          closePosition: "true",
         },
         true
       );
@@ -271,7 +287,7 @@ export class BinanceClient {
         status: data.status,
       };
     } catch (error: any) {
-      console.error(`Error closing position: ${error.message}`);
+      console.error(`Error closing position for ${symbol}: ${error.message}`);
       return null;
     }
   }
@@ -281,20 +297,22 @@ export class BinanceClient {
     try {
       const data = await this.request(
         "GET",
-        "/fapi/v2/openOrders",
+        "/fapi/v2/positionRisk",
         {},
         true
       );
 
-      return data.map((order: any) => ({
-        symbol: order.symbol,
-        orderId: order.orderId,
-        side: order.side,
-        type: order.type,
-        quantity: parseFloat(order.origQty),
-        price: parseFloat(order.price),
-        status: order.status,
-      }));
+      return data
+        .filter((pos: any) => parseFloat(pos.positionAmt) !== 0)
+        .map((pos: any) => ({
+          symbol: pos.symbol,
+          quantity: parseFloat(pos.positionAmt),
+          entryPrice: parseFloat(pos.entryPrice),
+          markPrice: parseFloat(pos.markPrice),
+          unrealizedProfit: parseFloat(pos.unRealizedProfit),
+          leverage: parseFloat(pos.leverage),
+          side: parseFloat(pos.positionAmt) > 0 ? "LONG" : "SHORT",
+        }));
     } catch (error: any) {
       console.error(`Error getting open positions: ${error.message}`);
       return [];
@@ -307,7 +325,7 @@ export class BinanceClient {
       const data = await this.request(
         "GET",
         "/fapi/v1/userTrades",
-        { symbol, limit },
+        { symbol: symbol.replace("-", ""), limit },
         true
       );
 
@@ -324,7 +342,7 @@ export class BinanceClient {
         realizedProfit: parseFloat(trade.realizedPnl),
       }));
     } catch (error: any) {
-      console.error(`Error getting trades: ${error.message}`);
+      console.error(`Error getting trades for ${symbol}: ${error.message}`);
       return [];
     }
   }
