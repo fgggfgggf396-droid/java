@@ -3,7 +3,7 @@
 // ============================================================================
 
 export class BinancePriceFetcher {
-  private baseUrl = "https://api.binance.com/api/v3";
+  private baseUrl = "https://fapi.binance.com/fapi/v1";
 
   async getPrice(symbol: string): Promise<number> {
     try {
