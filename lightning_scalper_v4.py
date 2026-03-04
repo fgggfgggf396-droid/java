@@ -37,8 +37,8 @@ from urllib.error import URLError, HTTPError
 
 # ============================================================
 CONFIG = {
-    'API_KEY': 'rKAp--snip--WziU',
-    'API_SECRET': 'npHj--snip--YA',
+    'API_KEY': 'rKApgjXcm5xYfFAotrHRe0GpX4KjAjoVJ09efnYiat3pBZhxF0tAkrQqBXravWziU',
+    'API_SECRET': 'npHj0kZuuQHsStFkRFQQ4PFnVfxG6EcfekkqgbgSxlqSowQAvcel8lrGHo0lhvlVT',
     'TESTNET': True,
     
     # === رأس المال ===
@@ -140,7 +140,7 @@ class BC:
     
     def _r(s,m,path,p=None,sig=False):
         p=p or {}
-        url=f"{s.base}{path}?{s._sign(p)}" if sig else f"{s.base}{path}{\'?\'+urlencode(p) if p else \'\'}"
+        url=f"{s.base}{path}?{s._sign(p)}" if sig else f"{s.base}{path}{'?'+urlencode(p) if p else ''}"
         req=Request(url);req.add_header('X-MBX-APIKEY',s.key)
         if m!='GET':req.method=m
         try:
@@ -288,189 +288,356 @@ class SigV4:
         return([float(k[1]) for k in kl],[float(k[2]) for k in kl],
                [float(k[3]) for k in kl],[float(k[4]) for k in kl],
                [float(k[5]) for k in kl])
+
+    def analyze(s,kl,sp_pct):
+        if s.is_sleep():return None
+        o,h,l,c,v=s.parse(kl)
+        cp=c[-1]
+        
+        # 🔧 ADX مزدوج
+        adx_f,pi_f,mi_f=I.adx(h,l,c,s.cfg['FAST_ADX_PERIOD'])
+        adx_s,pi_s,mi_s=I.adx(h,l,c,s.cfg['SLOW_ADX_PERIOD'])
+        
+        atr=I.atr(h,l,c,14)
+        vr=I.vol_ratio(c)
+        
+        # 🔧 Recovery Sniper
+        rec=I.recovery_check(c)
+        is_rec=False
+        if rec and rec['drop']<=s.cfg['RECOVERY_DROP'] and rec['bounce']>=s.cfg['RECOVERY_BOUNCE']:
+            is_rec=True
+            
+        # 🔧 Momentum Cascade
+        mom_dir,is_burst=I.momentum_cascade(c,v)
+        
+        # 🔧 الاتجاه العام
+        ema_f=I.ema(c,10);ema_s=I.ema(c,30)
+        uptrend=cp>ema_f>ema_s;downtrend=cp<ema_f<ema_s
+        
+        # 🔧 شروط الدخول
+        side=None;score=0;reasons=[]
+        
+        # BUY logic
+        if is_rec:
+            side='BUY';score=90;reasons.append('RECOVERY')
+        elif uptrend and pi_f>mi_f and adx_f>s.cfg['TREND_ADX_TH']:
+            side='BUY';score=70;reasons.append('TREND')
+            if is_burst and mom_dir==1:score+=20;reasons.append('BURST')
+        
+        # SELL logic
+        elif downtrend and mi_f>pi_f and adx_f>s.cfg['TREND_ADX_TH']:
+            side='SELL';score=70;reasons.append('TREND')
+            if is_burst and mom_dir==-1:score+=20;reasons.append('BURST')
+
+        if side:
+            return{'a':side,'p':cp,'sc':score,'r':reasons,'atr':atr,'vr':vr,
+                   'rec':is_rec,'burst':is_burst,'adx_f':adx_f}
+        return None
+
+
+# ============================================================
+#  🛡️ POSITION MANAGER V4
+# ============================================================
+
+class PM4:
+    def __init__(s,cfg):
+        s.cfg=cfg;s.pos=None;s.best=0;s.tsl=0;s.partial_done=False
     
-    def get_signal(s,klines,bal,open_trades):
-        if s.is_sleep():return 0
+    def open(s,sym,side,price,size,lev,atr,spread):
+        s.pos={'sym':sym,'side':side,'p':price,'size':size,'lev':lev,'atr':atr,'sp':spread}
+        s.best=price;s.tsl=0;s.partial_done=False
+    
+    def update(s,cp,client):
+        if not s.pos:return None
+        side=s.pos['side'];entry=s.pos['p'];atr=s.pos['atr']
         
-        o,h,l,c,v=s.parse(klines)
+        # PNL calculation
+        if side=='BUY':
+            pnl=(cp-entry)/entry*s.pos['lev']
+            if cp>s.best:s.best=cp
+            dist=(s.best-entry)/entry*100
+        else:
+            pnl=(entry-cp)/entry*s.pos['lev']
+            if cp<s.best or s.best==0:s.best=cp
+            dist=(entry-s.best)/entry*100
+            
+        # 🔧 Trailing Stop Logic
+        new_tsl=0
+        for th,prot in s.cfg['TRAIL_LEVELS']:
+            if dist>=th:
+                if side=='BUY':new_tsl=s.best-(s.best-entry)*prot
+                else:new_tsl=s.best+(entry-s.best)*prot
+                break
         
-        # === فلاتر السيولة ===
-        if I.vol_ratio(c)<s.cfg['MIN_VOL_RATIO']:return 0
-        if I.atr(h,l,c)<s.cfg['MIN_ATR_PCT']:return 0
+        if new_tsl!=0:
+            if side=='BUY':
+                if new_tsl>s.tsl:s.tsl=new_tsl
+            else:
+                if s.tsl==0 or new_tsl<s.tsl:s.tsl=new_tsl
         
-        # === Recovery Sniper ===
-        if s.cfg['RECOVERY_ENABLED']:
-            rec=I.recovery_check(c,60)
-            if rec and rec['drop']<s.cfg['RECOVERY_DROP'] and rec['bounce']>s.cfg['RECOVERY_BOUNCE'] and rec['since_low']<5:
-                return 1.5 # إشارة قوية مع مخاطرة أعلى
+        # 🔧 Partial Exit Logic
+        partial=None
+        if s.cfg['PARTIAL_EXIT_ENABLED'] and not s.partial_done:
+            target_dist=s.cfg['PARTIAL_AT_ATR']*atr
+            if side=='BUY' and cp>=entry+target_dist:
+                partial={'qty':s.pos['size']*s.cfg['PARTIAL_SIZE'],'pnl':pnl*s.cfg['PARTIAL_SIZE']}
+                s.pos['size']-=partial['qty'];s.partial_done=True
+            elif side=='SELL' and cp<=entry-target_dist:
+                partial={'qty':s.pos['size']*s.cfg['PARTIAL_SIZE'],'pnl':pnl*s.cfg['PARTIAL_SIZE']}
+                s.pos['size']-=partial['qty'];s.partial_done=True
+
+        # 🔧 Exit conditions
+        action=None
+        # 1. SL (Hard)
+        sl_dist=s.cfg['SL_ATR_MULT']*atr
+        if side=='BUY' and cp<=entry-sl_dist:action='SL'
+        elif side=='SELL' and cp>=entry+sl_dist:action='SL'
         
-        # === Momentum Cascade ===
-        mom,ok=I.momentum_cascade(c,v)
-        if ok and mom==1:return 1
-        if ok and mom==-1:return -1
+        # 2. TSL
+        if s.tsl!=0:
+            if side=='BUY' and cp<=s.tsl:action='TSL'
+            elif side=='SELL' and cp>=s.tsl:action='TSL'
+            
+        # 3. Max TP
+        if pnl>=s.cfg['MAX_TP_PCT']*s.pos['lev']:action='MAX_TP'
         
-        # === ADX مزدوج ===
-        adx_f,pdi_f,mdi_f=I.adx(h,l,c,s.cfg['FAST_ADX_PERIOD'])
-        adx_s,pdi_s,mdi_s=I.adx(h,l,c,s.cfg['SLOW_ADX_PERIOD'])
-        
-        if adx_f>s.cfg['TREND_ADX_TH'] and pdi_f>mdi_f and adx_s>s.cfg['TREND_ADX_TH'] and pdi_s>mdi_s:return 1
-        if adx_f>s.cfg['TREND_ADX_TH'] and mdi_f>pdi_f and adx_s>s.cfg['TREND_ADX_TH'] and mdi_s>pdi_s:return -1
-        
-        return 0
+        return{'pnl':round(pnl,4),'best':round(s.best,4),'tsl':round(s.tsl,8),
+               'action':action,'partial':partial}
+    
+    def close(s):
+        p=s.pos;s.pos=None;s.best=0;s.tsl=0;s.partial_done=False;return p
 
 
 # ============================================================
-#  🤖 الروبوت الرئيسي V4
+#  🤖 THE BEAST V4
 # ============================================================
 
-class BotV4:
+class BeastV4:
     def __init__(s,cfg):
         s.cfg=cfg
-        s.bc=BC(cfg['API_KEY'],cfg['API_SECRET'],cfg['TESTNET'])
-        s.sig=SigV4(cfg)
-        s.open_trades={}
-        s.capital=cfg['INITIAL_CAPITAL']
-        s.risk_capital=s.capital*s.cfg['BASE_RISK']
-        s.last_scan=0
-        
-    def get_qty(s,sym,price,risk_mult=1.0):
-        info=s.bc.info(sym)
-        if not info:return 0
-        
-        risk_amount=s.risk_capital*risk_mult
-        
-        # === Volatility Boost ===
-        if s.cfg['VOL_BOOST_ENABLED']:
-            o,h,l,c,v=s.sig.parse(s.bc.klines(sym,s.cfg['KLINE_INTERVAL'],s.cfg['KLINE_LIMIT']))
-            if I.vol_ratio(c,10,20)>s.cfg['VOL_BOOST_THRESHOLD']:
-                risk_amount*=s.cfg['VOL_BOOST_RISK_MULT']
-        
-        # حساب الستوب بناءً على ATR
-        o,h,l,c,v=s.sig.parse(s.bc.klines(sym,s.cfg['KLINE_INTERVAL'],s.cfg['KLINE_LIMIT']))
-        atr_val=I.atr(h,l,c)
-        stop_loss_dist=atr_val*s.cfg['SL_ATR_MULT']
-        
-        if stop_loss_dist==0:return 0
-        
-        # حجم الصفقة
-        qty=risk_amount/(stop_loss_dist*s.cfg['MAX_LEVERAGE'])
-        
-        # تعديل الحجم لأقرب خطوة
-        qty=math.floor(qty/info['step'])*info['step']
-        
-        return qty if qty>=info['min'] else 0
+        s.cl=BC(cfg['API_KEY'],cfg['API_SECRET'],cfg['TESTNET'])
+        s.eng=SigV4(cfg)
+        s.mgrs={};s.cinfo={};s.op={}
+        s.bal=cfg['INITIAL_CAPITAL']
+        s.dp=0;s.dt=0;s.dw=0;s.dl=0
+        s.cl_cnt=0;s.cool=0
+        s.tp=0;s.tw=0;s.tl=0
+        s.today=None;s.wp=0
+        s.partial_profits=0  # أرباح من الخروج الجزئي
     
-    def manage_trades(s):
-        for sym,trade in list(s.open_trades.items()):
-            price=s.bc.price(sym)
-            if not price:continue
+    def risk(s):
+        """مخاطرة ديناميكية + مركبة"""
+        base=s.cfg['BASE_RISK']
+        ratio=s.tp/s.cfg['INITIAL_CAPITAL'] if s.cfg['INITIAL_CAPITAL'] else 0
+        
+        if ratio>0.3:r=min(s.cfg['MAX_RISK'],base*1.6)
+        elif ratio>0.15:r=min(s.cfg['MAX_RISK'],base*1.3)
+        elif ratio>0:r=base*1.1
+        elif ratio<-0.15:r=max(s.cfg['MIN_RISK'],base*0.5)
+        elif ratio<-0.05:r=max(s.cfg['MIN_RISK'],base*0.7)
+        else:r=base
+        
+        if s.cl_cnt>=3:r*=0.4
+        elif s.cl_cnt>=2:r*=0.6
+        return r
+    
+    def setup(s):
+        mode='🔴 TEST' if s.cfg['TESTNET'] else '🟢 LIVE'
+        print(f"\n{'='*70}")
+        print(f"  ⚡ LIGHTNING V4.0 صائد الألف - {mode}")
+        print(f"  💰 ${s.cfg['INITIAL_CAPITAL']} | 🎯 ${s.cfg['WEEKLY_TARGET']}/أسبوع")
+        print(f"  📊 {len(s.cfg['COINS'])} عملة | 4 صفقات | مركب أرباح | Recovery Sniper")
+        print(f"  🔧 ADX مزدوج(7+14) | Partial Exit | Momentum Cascade")
+        print(f"{'='*70}\n")
+        
+        b=s.cl.bal()
+        if b is not None:s.bal=b;print(f"  ✅ ${b:.2f}")
+        else:print(f"  ❌ فشل!");return False
+        
+        ok=[]
+        for c in s.cfg['COINS']:
+            sym=c['s']
+            s.cl.set_lev(sym,c['lev']);s.cl.set_mg(sym)
+            inf=s.cl.info(sym)
+            if inf:
+                s.cinfo[sym]=inf;s.mgrs[sym]=PM4(s.cfg);s.op[sym]=False
+                ok.append(c)
+                print(f"  ✅ {sym:16s} {c['lev']:2d}x [{c['t']}]")
+            else:
+                print(f"  ⚠️ {sym} - تخطي")
+        
+        s.cfg['COINS']=ok
+        print(f"\n  🚀 {len(ok)} عملة نشطة\n")
+        return len(ok)>0
+    
+    def rqty(s,sym,qty):
+        inf=s.cinfo.get(sym)
+        if not inf:return qty
+        st=inf['step']
+        if st<=0:return qty
+        p=max(0,-int(math.log10(st)))
+        return round(math.floor(qty/st)*st,p)
+    
+    def reset(s):
+        today=datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        if today!=s.today:
+            if s.today:
+                wr=s.dw/(s.dw+s.dl)*100 if(s.dw+s.dl) else 0
+                print(f"\n  📅 {s.today}: ${s.dp:+.2f} W:{s.dw} L:{s.dl} WR:{wr:.0f}% "
+                      f"Week:${s.wp:+.2f} Total:${s.tp:+.2f} Bal:${s.bal:.0f}")
+            dow=datetime.now(timezone.utc).weekday()
+            if dow==0 and s.today:
+                flag="🎯🎯🎯" if s.wp>=1000 else("🎯" if s.wp>=500 else "")
+                print(f"\n  📊 === أسبوع: ${s.wp:+.2f} {flag} ===\n")
+                s.wp=0
+            s.today=today;s.dp=0;s.dt=0;s.dw=0;s.dl=0;s.cl_cnt=0
+    
+    def can(s):
+        if s.dp>=s.cfg['DAILY_TARGET']:return False
+        if s.dp<=-s.cfg['DAILY_LOSS_LIMIT']:return False
+        if time.time()<s.cool:return False
+        return True
+    
+    def nop(s):return sum(1 for v in s.op.values() if v)
+    
+    def scan(s,sym,lev,tier):
+        pm=s.mgrs[sym]
+        
+        if s.op.get(sym):
+            price=s.cl.price(sym)
+            if not price:return
+            st=pm.update(price,s.cl)
+            if not st:return
             
-            # === Smart Exit (خروج جزئي + ملاحقة أرباح) ===
-            if s.cfg['PARTIAL_EXIT_ENABLED']:
-                o,h,l,c,v=s.sig.parse(s.bc.klines(sym,s.cfg['KLINE_INTERVAL'],s.cfg['KLINE_LIMIT']))
-                atr_val=I.atr(h,l,c)
+            # 🔧 Partial exit
+            if st['partial']:
+                pe=st['partial']
+                s.cl.mkt_close(sym,pm.pos['side'],s.rqty(sym,pe['qty']))
+                s.partial_profits+=pe['pnl']
+                s.dp+=pe['pnl'];s.tp+=pe['pnl'];s.wp+=pe['pnl'];s.bal+=pe['pnl']
+                now=datetime.now().strftime('%H:%M:%S')
+                print(f"  🟡 {now} {sym[:10]:10s} PARTIAL 50% ${pe['pnl']:+.3f} "
+                      f"(riding rest...)")
+            
+            if st['action']:
+                pos=pm.pos
+                s.cl.mkt_close(sym,pos['side'],s.rqty(sym,pos['size']))
+                pnl=st['pnl']
+                s.dp+=pnl;s.tp+=pnl;s.wp+=pnl;s.dt+=1;s.bal+=pnl
                 
-                # أول خروج جزئي عند 3× ATR
-                if not trade['partial_closed'] and abs(price-trade['entry'])>=atr_val*s.cfg['PARTIAL_AT_ATR']:
-                    s.bc.mkt_close(sym,trade['side'],trade['qty']*s.cfg['PARTIAL_SIZE'])
-                    trade['qty']*=(1-s.cfg['PARTIAL_SIZE'])
-                    trade['partial_closed']=True
-                    print(f"[{sym}] ⚡ خروج جزئي: 50% عند {s.cfg['PARTIAL_AT_ATR']}x ATR. الوقف عند الدخول.")
-                
-                # ملاحقة أرباح
-                if trade['side']=='BUY':
-                    trade['high_price']=max(trade['high_price'],price)
-                    for tp_mult,trail_pct in s.cfg['TRAIL_LEVELS']:
-                        if price>=trade['entry']*(1+tp_mult/100):
-                            new_sl=trade['entry']*(1+trail_pct/100)
-                            if new_sl>trade['stop_loss']:
-                                trade['stop_loss']=new_sl
-                                print(f"[{sym}] 📈 رفع الوقف إلى {new_sl} عند ربح {tp_mult}%")
+                if pnl>0 or(pnl>-0.05 and s.partial_profits>0):
+                    s.tw+=1;s.dw+=1;s.cl_cnt=0;ic="✅"
                 else:
-                    trade['low_price']=min(trade['low_price'],price)
-                    for tp_mult,trail_pct in s.cfg['TRAIL_LEVELS']:
-                        if price<=trade['entry']*(1-tp_mult/100):
-                            new_sl=trade['entry']*(1-trail_pct/100)
-                            if new_sl<trade['stop_loss']:
-                                trade['stop_loss']=new_sl
-                                print(f"[{sym}] 📉 رفع الوقف إلى {new_sl} عند ربح {tp_mult}%")
-            
-            # إغلاق عند الستوب لوس
-            if (trade['side']=='BUY' and price<=trade['stop_loss']) or \
-               (trade['side']=='SELL' and price>=trade['stop_loss']):
-                s.bc.mkt_close(sym,trade['side'],trade['qty'])
-                s.capital+=trade['profit'] # تحديث رأس المال
-                del s.open_trades[sym]
-                print(f"[{sym}] ❌ إغلاق عند الوقف. رأس المال: {s.capital}")
-            
-            # إغلاق عند الهدف (TP)
-            if (trade['side']=='BUY' and price>=trade['take_profit']) or \
-               (trade['side']=='SELL' and price<=trade['take_profit']):
-                s.bc.mkt_close(sym,trade['side'],trade['qty'])
-                s.capital+=trade['profit'] # تحديث رأس المال
-                del s.open_trades[sym]
-                print(f"[{sym}] ✅ إغلاق عند الهدف. رأس المال: {s.capital}")
-    
-    def scan(s):
-        if time.time()-s.last_scan<s.cfg['SCAN_INTERVAL']:return
-        s.last_scan=time.time()
-        
-        s.manage_trades()
-        
-        if len(s.open_trades)>=s.cfg['MAX_OPEN']:return
-        
-        for coin in s.cfg['COINS']:
-            sym=coin['s']
-            if sym in s.open_trades:continue
-            
-            klines=s.bc.klines(sym,s.cfg['KLINE_INTERVAL'],s.cfg['KLINE_LIMIT'])
-            if not klines:continue
-            
-            signal=s.sig.get_signal(klines,s.bc.bal(),s.open_trades)
-            if signal==0:continue
-            
-            price=s.bc.price(sym)
-            if not price:continue
-            
-            qty=s.get_qty(sym,price,abs(signal))
-            if qty==0:continue
-            
-            side='BUY' if signal>0 else 'SELL'
-            
-            # === فتح الصفقة ===
-            order=s.bc.mkt_open(sym,side,qty)
-            if order:
-                entry=price
-                stop_loss=entry*(1-s.cfg['SL_ATR_MULT']*I.atr(s.sig.parse(klines)[1],s.sig.parse(klines)[2],s.sig.parse(klines)[3])/entry) if side=='BUY' \
-                          else entry*(1+s.cfg['SL_ATR_MULT']*I.atr(s.sig.parse(klines)[1],s.sig.parse(klines)[2],s.sig.parse(klines)[3])/entry)
-                take_profit=entry*(1+s.cfg['MAX_TP_PCT']) if side=='BUY' else entry*(1-s.cfg['MAX_TP_PCT'])
+                    s.tl+=1;s.dl+=1;s.cl_cnt+=1;ic="❌"
+                    if s.cl_cnt>=s.cfg['CONSEC_LOSS_LIMIT']:
+                        s.cool=time.time()+s.cfg['COOLDOWN_MIN']*60
+                        print(f"  ⏸️ {s.cfg['COOLDOWN_MIN']}min")
                 
-                s.open_trades[sym]={
-                    'entry':entry,
-                    'side':side,
-                    'qty':qty,
-                    'stop_loss':stop_loss,
-                    'take_profit':take_profit,
-                    'high_price':entry if side=='BUY' else 0,
-                    'low_price':entry if side=='SELL' else 0,
-                    'partial_closed':False,
-                    'profit':0 # سيتم تحديثه لاحقاً
-                }
-                print(f"[{sym}] 🚀 فتح صفقة {side} بحجم {qty} عند {entry}. SL: {stop_loss}, TP: {take_profit}")
-            
+                now=datetime.now().strftime('%H:%M:%S')
+                rp=s.risk()*100
+                total_trade_pnl=pnl+(s.partial_profits if pm.partial_done else 0)
+                print(f"  {ic} {now} {sym[:10]:10s} {pos['side']:4s} "
+                      f"${total_trade_pnl:+.3f} bst:${st['best']:+.3f} "
+                      f"{st['action']:8s} D:${s.dp:+.2f} R:{rp:.0f}% B:${s.bal:.0f}")
+                
+                pm.close()
+                s.op[sym]=False
+                s.partial_profits=0
+            return
+        
+        if not s.can():return
+        if s.nop()>=s.cfg['MAX_OPEN']:return
+        
+        bk=s.cl.book(sym)
+        if bk and bk['spp']>s.cfg['MAX_SPREAD_PCT']:return
+        spread=bk['sp'] if bk else 0;sp_pct=bk['spp'] if bk else 0
+        
+        kl=s.cl.klines(sym,s.cfg['KLINE_INTERVAL'],s.cfg['KLINE_LIMIT'])
+        if not kl:return
+        
+        sig=s.eng.analyze(kl,sp_pct)
+        if not sig:return
+        
+        # 🔧 مخاطرة ديناميكية + مركبة
+        r=s.risk()
+        
+        # 🔧 Recovery boost
+        if sig.get('rec'):r*=s.cfg['RECOVERY_RISK_MULT']
+        
+        # 🔧 Volatility boost
+        if s.cfg['VOL_BOOST_ENABLED'] and sig.get('vr',1)>s.cfg['VOL_BOOST_THRESHOLD']:
+            r*=s.cfg['VOL_BOOST_RISK_MULT']
+        
+        # 🔧 Momentum burst boost
+        if sig.get('burst'):r*=1.2
+        
+        r=min(r,s.cfg['MAX_RISK'])
+        
+        # 🔧 الحجم يعتمد على الرصيد الحالي (مركب!)
+        risk_amt=s.bal*r
+        pos_val=risk_amt*lev
+        qty=s.rqty(sym,pos_val/sig['p'])
+        if qty<=0:return
+        
+        result=s.cl.mkt_open(sym,sig['a'],qty)
+        if not result:return
+        
+        pm.open(sym,sig['a'],sig['p'],qty,lev,sig['atr'],spread)
+        s.op[sym]=True
+        s.partial_profits=0
+        
+        now=datetime.now().strftime('%H:%M:%S')
+        rp=r*100
+        flags=""
+        if sig.get('rec'):flags+="🔄"
+        if sig.get('burst'):flags+="💥"
+        print(f"  🔵 {now} {sym[:10]:10s} {sig['a']:4s} "
+              f"@{sig['p']:.6f} Q:{qty} L:{lev}x "
+              f"S:{sig['sc']} ADXf:{sig['adx_f']:.0f} "
+              f"R:{rp:.0f}% ${risk_amt:.1f} "
+              f"{flags} {' '.join(sig['r'][:4])}")
+    
     def run(s):
-        while True:
-            try:
-                s.scan()
-            except Exception as e:
-                print(f"خطأ عام: {e}")
-            time.sleep(s.cfg['SCAN_INTERVAL'])
+        if not s.setup():return
+        try:
+            while True:
+                s.reset()
+                for c in s.cfg['COINS']:
+                    try:s.scan(c['s'],c['lev'],c['t'])
+                    except:pass
+                time.sleep(s.cfg['SCAN_INTERVAL'])
+        except KeyboardInterrupt:
+            print(f"\n  🛑 إيقاف...")
+            for sym,pm in s.mgrs.items():
+                if pm.pos:
+                    p=s.cl.price(sym)
+                    if p:s.cl.mkt_close(sym,pm.pos['side'],s.rqty(sym,pm.pos['size']))
+                    print(f"  🔴 {sym}")
+            t=s.tw+s.tl;wr=s.tw/t*100 if t else 0
+            print(f"\n{'='*70}")
+            print(f"  📊 Total:${s.tp:+.2f} W:{s.tw} L:{s.tl} WR:{wr:.0f}% Bal:${s.bal:.2f}")
+            print(f"{'='*70}\n")
 
 
-# ============================================================
-#  🚀 تشغيل الروبوت
-# ============================================================
-
-if __name__ == '__main__':
-    bot = BotV4(CONFIG)
-    bot.run()
+if __name__=='__main__':
+    print("""
+╔═══════════════════════════════════════════════════════════════════════╗
+║                ⚡ LIGHTNING SCALPER V4.0 - صائد الألف                 ║
+╠═══════════════════════════════════════════════════════════════════════╣
+║                                                                       ║
+║  🎯 الهدف: $1,000/أسبوع                                             ║
+║                                                                       ║
+║  🔧 V4 الجديد:                                                       ║
+║  ✅ Recovery Sniper: يصطاد الارتداد فوراً (يتجاوز ADX!)              ║
+║  ✅ ADX مزدوج: سريع(7) + بطيء(14) = يلحق التغير أسرع               ║
+║  ✅ Partial Exit: 50% ربح عند TP1 + 50% يركب الموجة                 ║
+║  ✅ Momentum Cascade: 3 شموع متتالية + حجم = دخول قوي               ║
+║  ✅ 12 عملة: PEPE,DOGE,SHIB,FLOKI,BONK,WIF,BOME,NOT,PEOPLE,SUI,APT,SEI ║
+║  ✅ 4 صفقات بنفس الوقت                                               ║
+║  ✅ Volatility Boost: تذبذب عالي = مخاطرة أعلى تلقائياً              ║
+║  ✅ مخاطرة 5-10% متغيرة + مركب أرباح فوري                           ║
+║                                                                       ║
+║  📝 API Keys → TESTNET = True → شغّل → اختبر                        ║
+╚═══════════════════════════════════════════════════════════════════════╝
+    """)
+    BeastV4(CONFIG).run()
